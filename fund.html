@@ -73,6 +73,14 @@ main { max-width: 1100px; margin: 0 auto; padding: 32px; }
 .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.spark-cell { display: flex; align-items: center; justify-content: flex-end; min-height: 32px; }
+.price-pulse { color: var(--text-muted); animation: pricePulse 1.4s ease-in-out infinite; }
+@keyframes pricePulse { 0%,100% { opacity: .35; } 50% { opacity: .9; } }
+.price-source-note {
+  font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--text-muted);
+  font-weight: 400; text-transform: none; letter-spacing: 0.3px;
+}
+
 .fund-link { color: var(--teal); font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-decoration: none; }
 .fund-link:hover { text-decoration: underline; }
 .empty-note { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 12px 0; }
@@ -108,7 +116,7 @@ footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-
 </main>
 
 <footer>
-  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported for filings since Jan 2023 — rounded to the nearest whole dollar.
+  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported for filings since Jan 2023 — rounded to the nearest whole dollar. Ticker mapping via OpenFIGI; price history via Alpaca, when configured — both optional and never required for the core holdings data.
 </footer>
 
 <script>
@@ -150,6 +158,164 @@ function fmtMoney(n) {
   return '$' + n.toFixed(0);
 }
 function fmtShares(n) { return Math.round(n).toLocaleString('en-US'); }
+
+// ══════════════════════════════════════════════════════════════
+// PRICE CONTEXT — CUSIP → ticker (OpenFIGI) → price history (Alpaca proxy)
+// ══════════════════════════════════════════════════════════════
+// Entirely optional and self-healing: if OpenFIGI has no match, or the
+// Alpaca proxy isn't deployed/configured, rows just skip these columns.
+// Nothing here blocks the core holdings table, which SEC data alone builds.
+
+// Get a free key (raises the rate limit) at https://www.openfigi.com/api — optional.
+const OPENFIGI_URL = 'https://api.openfigi.com/v3/mapping';
+const OPENFIGI_API_KEY = '';
+
+// See alpaca-proxy-worker.js — a Cloudflare Worker that holds your real Alpaca
+// keys server-side. Replace with your deployed workers.dev URL to enable.
+const ALPACA_PROXY_URL = 'https://YOUR-WORKER-SUBDOMAIN.workers.dev';
+const alpacaProxyConfigured = !!ALPACA_PROXY_URL && !ALPACA_PROXY_URL.includes('YOUR-WORKER-SUBDOMAIN');
+
+// CUSIPs don't change day to day, so cache resolved tickers in localStorage
+// across visits — this is a real deployed site the user owns, not a sandboxed
+// preview, so persistent client storage is appropriate here.
+const TICKER_CACHE_KEY = 'sd_cusip_ticker_cache_v1';
+let tickerCache = {};
+try { tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}'); } catch (e) { tickerCache = {}; }
+function saveTickerCache() {
+  try { localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(tickerCache)); } catch (e) { /* storage unavailable — non-fatal, just won't persist */ }
+}
+
+// Rate-limited batch queue for OpenFIGI: unauthenticated tier allows 25
+// requests/minute, up to 10 CUSIPs per request. A holdings table can have
+// thousands of rows, so resolution is driven by scroll (see IntersectionObserver
+// below) and batched here rather than firing one request per row.
+let cusipQueue = [];
+let cusipQueueTimer = null;
+const pendingCusipResolvers = {};
+
+function resolveCusipToTicker(cusip) {
+  if (!cusip) return Promise.resolve(null);
+  if (cusip in tickerCache) return Promise.resolve(tickerCache[cusip]);
+  return new Promise(resolve => {
+    (pendingCusipResolvers[cusip] = pendingCusipResolvers[cusip] || []).push(resolve);
+    if (!cusipQueue.includes(cusip)) cusipQueue.push(cusip);
+    if (!cusipQueueTimer) cusipQueueTimer = setTimeout(flushCusipQueue, 300); // debounce so a burst of rows batches together
+  });
+}
+
+async function flushCusipQueue() {
+  cusipQueueTimer = null;
+  if (!cusipQueue.length) return;
+  const batch = cusipQueue.splice(0, 10);
+  const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
+  const settle = (cusip, ticker) => {
+    tickerCache[cusip] = ticker;
+    (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
+    delete pendingCusipResolvers[cusip];
+  };
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
+    const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(jobs) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    batch.forEach((cusip, i) => {
+      const entry = results[i];
+      let ticker = null;
+      if (entry && Array.isArray(entry.data) && entry.data.length) {
+        // Prefer the US-listed match — the same CUSIP can map to multiple
+        // share classes/exchanges (ADRs, dual listings).
+        const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
+        ticker = match.ticker || null;
+      }
+      settle(cusip, ticker);
+    });
+    saveTickerCache();
+  } catch (err) {
+    batch.forEach(cusip => settle(cusip, null));
+  }
+
+  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, 3000); // stay well under 25 req/min
+}
+
+// Daily bars since a given date, via the Alpaca proxy (never calls Alpaca directly —
+// see the credential note in alpaca-proxy-worker.js for why).
+const barsCache = new Map();
+function fetchBarsSince(ticker, startISO) {
+  if (!alpacaProxyConfigured || !ticker || !startISO) return Promise.resolve(null);
+  const cacheKey = ticker + '|' + startISO;
+  if (barsCache.has(cacheKey)) return barsCache.get(cacheKey);
+  const endISO = new Date().toISOString().slice(0, 10);
+  const promise = fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(ticker)}&start=${startISO}&end=${endISO}`)
+    .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(data => (data.bars && data.bars.length >= 2) ? data.bars : null)
+    .catch(() => null);
+  barsCache.set(cacheKey, promise);
+  return promise;
+}
+
+function toISODate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+// Minimal inline SVG sparkline — no charting library needed for a dozen points.
+function buildSparklineSvg(bars, pctChange) {
+  const w = 108, h = 32, pad = 3;
+  const closes = bars.map(b => b.c);
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const range = (max - min) || 1;
+  const stepX = closes.length > 1 ? (w - pad * 2) / (closes.length - 1) : 0;
+  const pts = closes.map((c, i) => [pad + i * stepX, h - pad - ((c - min) / range) * (h - pad * 2)]);
+  const color = pctChange >= 0 ? 'var(--teal)' : 'var(--rose)';
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${h - pad} L${pts[0][0].toFixed(1)},${h - pad} Z`;
+  const last = pts[pts.length - 1];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block">
+    <path d="${area}" fill="${color}" opacity="0.14"></path>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"></path>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.2" fill="${color}"></circle>
+  </svg>`;
+}
+
+// Wires up lazy, scroll-driven price loading for the holdings table: rows
+// resolve their ticker and fetch price history only once they scroll near
+// the viewport, so a fund with thousands of positions doesn't fire thousands
+// of requests on page load.
+function initPriceContext(filingDateStr) {
+  if (!alpacaProxyConfigured) return;
+  const filingISO = toISODate(filingDateStr);
+  if (!filingISO) return;
+
+  const rows = document.querySelectorAll('tr[data-cusip]');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      observer.unobserve(entry.target);
+      const row = entry.target;
+      const cusip = row.dataset.cusip;
+      const sparkCell = row.querySelector('.spark-cell');
+      const chgCell = row.querySelector('.chg-cell');
+
+      resolveCusipToTicker(cusip).then(ticker => {
+        if (!ticker) { if (chgCell) chgCell.textContent = '—'; return; }
+        return fetchBarsSince(ticker, filingISO).then(bars => {
+          if (!bars) { if (chgCell) chgCell.textContent = '—'; return; }
+          const pct = ((bars[bars.length - 1].c - bars[0].o) / bars[0].o) * 100;
+          if (chgCell) {
+            chgCell.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+            chgCell.style.color = pct >= 0 ? 'var(--teal)' : 'var(--rose)';
+          }
+          if (sparkCell) sparkCell.innerHTML = buildSparklineSvg(bars, pct);
+        });
+      });
+    });
+  }, { rootMargin: '200px 0px' });
+
+  rows.forEach(r => observer.observe(r));
+}
 
 async function fetchInfoTableHoldings(cik, accessionNoDashes) {
   const cikTrimmed = String(parseInt(cik, 10));
@@ -268,17 +434,24 @@ async function loadFundDetail() {
       html += `<div class="empty-note">No prior 13F-HR filing found for this fund — quarter-over-quarter comparison isn't available yet, but the full current holdings are below.</div>`;
     }
 
-    html += `<div class="section-title">All Holdings <span class="section-count">${current.holdings.length} positions, sorted by value</span></div>`;
+    html += `<div class="section-title">All Holdings <span class="section-count">${current.holdings.length} positions, sorted by value${alpacaProxyConfigured ? ' <span class="price-source-note">· price context via Alpaca, tickers via OpenFIGI</span>' : ''}</span></div>`;
     html += `
       <table class="data-table">
-        <thead><tr><th>Issuer</th><th>Shares</th><th>Value</th><th>% of Portfolio</th></tr></thead>
+        <thead><tr>
+          <th>Issuer</th><th>Shares</th><th>Value</th><th>% of Portfolio</th>
+          ${alpacaProxyConfigured ? '<th>Chart</th><th title="Price change from filing date to today">Since Filing</th>' : ''}
+        </tr></thead>
         <tbody>
           ${current.holdings.map(h => `
-            <tr>
+            <tr data-cusip="${escHtml(h.cusip)}">
               <td>${escHtml(h.issuer)}</td>
               <td class="num">${fmtShares(h.shares)}</td>
               <td class="num ticker">${fmtMoney(h.valueUsd)}</td>
               <td class="num">${current.totalValue ? ((h.valueUsd / current.totalValue) * 100).toFixed(1) + '%' : '—'}</td>
+              ${alpacaProxyConfigured ? `
+                <td><div class="spark-cell"></div></td>
+                <td class="num mono chg-cell price-pulse">…</td>
+              ` : ''}
             </tr>
           `).join('')}
         </tbody>
@@ -288,6 +461,7 @@ async function loadFundDetail() {
     html += `<div style="margin-top:20px"><a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=13F&dateb=&owner=include&count=10" target="_blank" rel="noopener">View raw filing on SEC EDGAR →</a></div>`;
 
     body.innerHTML = html;
+    initPriceContext(latestDate);
   } catch (err) {
     document.getElementById('page-body').innerHTML = `
       <div class="status-box error">
