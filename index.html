@@ -60,7 +60,7 @@ header {
   font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--text-dim);
 }
 .freshness-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
-.freshness-dot.live { background: var(--teal); box-shadow: 0 0 6px var(--teal); animation: pulse-dot 2s infinite; }
+.freshness-dot.active { background: #4ade80; box-shadow: 0 0 6px #4ade80; animation: pulse-dot 2s infinite; }
 .freshness-dot.stale { background: var(--rose); }
 @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
@@ -116,6 +116,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .signal-tag.insider { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
 .signal-tag.institution { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(79,209,197,0.35); }
 .signal-tag.congress { background: rgba(180,150,255,0.12); color: #b496ff; border: 1px solid rgba(180,150,255,0.35); }
+.signal-tag.pe { background: rgba(255,140,90,0.12); color: #ff8c5a; border: 1px solid rgba(255,140,90,0.35); }
 .signal-meta { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
 /* ── TABLE ────────────────────────────────────────────────── */
@@ -179,7 +180,7 @@ footer a { color: var(--amber); }
   <div class="hero">
     <div>
       <div class="hero-title">Follow the <span>money</span>, legally.</div>
-      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
+      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, private equity firms, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
     </div>
     <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
   </div>
@@ -188,13 +189,14 @@ footer a { color: var(--amber); }
     <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">⚡ Top Signals</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
     <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
+    <button class="tab-btn" data-tab="pe" onclick="switchTab('pe')">Private Equity</button>
     <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
   </div>
 
   <!-- TOP SIGNALS -->
   <div class="tab-panel active" id="tab-signals">
     <div id="signals-body" class="signal-list">
-      <div class="status-box"><div class="spinner"></div>Gathering signals across all three sources…</div>
+      <div class="status-box"><div class="spinner"></div>Gathering signals across all sources…</div>
     </div>
   </div>
 
@@ -212,6 +214,13 @@ footer a { color: var(--amber); }
     </div>
   </div>
 
+  <!-- PRIVATE EQUITY / 13D & 13G -->
+  <div class="tab-panel" id="tab-pe">
+    <div id="pe-body">
+      <div class="status-box"><div class="spinner"></div>Fetching the latest Schedule 13D/13G stake-disclosure filings from SEC EDGAR…</div>
+    </div>
+  </div>
+
   <!-- CONGRESS -->
   <div class="tab-panel" id="tab-congress">
     <div id="congress-body">
@@ -221,7 +230,7 @@ footer a { color: var(--amber); }
 </main>
 
 <footer>
-  Data sourced from SEC EDGAR (data.sec.gov) and public congressional disclosure datasets. Congressional and 13F data carry legally mandated reporting delays — see header badges for freshness.
+  Data sourced from SEC EDGAR (data.sec.gov) and public congressional disclosure datasets. Congressional and 13F data carry legally mandated reporting delays; Schedule 13D/13G filings are close to real-time — see header badges for freshness.
 </footer>
 
 <script>
@@ -229,7 +238,38 @@ footer a { color: var(--amber); }
 // CONFIG — data sources. Update these if a source moves.
 // ══════════════════════════════════════════════════════════════
 const SEC_INSIDER_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
-const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
+// SEC's server doesn't send CORS headers for this endpoint, so direct browser fetch()
+// gets blocked outright (not an HTTP error — the browser refuses to hand back the
+// response at all). Routing through a public CORS-proxy passthrough works around this.
+// Known tradeoff: this adds a dependency on a third-party proxy staying up.
+// Free public CORS proxies are individually unreliable (documented ~50% failure
+// rates, aggressive rate limits) — trying several in sequence is much more robust
+// than depending on any single one.
+const CORS_PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+];
+
+async function fetchViaProxyChain(targetUrl) {
+  let lastErr = null;
+  for (const buildProxyUrl of CORS_PROXIES) {
+    try {
+      const res = await fetch(buildProxyUrl(targetUrl));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    } catch (err) {
+      lastErr = err;
+      // try the next proxy in the chain
+    }
+  }
+  throw lastErr || new Error('All proxies failed');
+}
+const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.csv';
+// Schedule 13D/13G: filed when an investor (often a PE firm or activist) crosses
+// 5% ownership of a public company — the closest thing to a real-time "stake-building"
+// signal for private equity, since routine 13F filings are just quarterly holdings snapshots.
+const SEC_PE_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SC+13&company=&dateb=&owner=include&count=100&output=atom';
 const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
 
 // Curated watchlist of well-known institutional investors and their SEC CIK numbers.
@@ -240,7 +280,11 @@ const FUND_WATCHLIST = [
   { name: 'Renaissance Technologies', cik: '0001037389' },
   { name: 'Pershing Square Capital (Ackman)', cik: '0001336528' },
   { name: 'Scion Asset Management (Burry)', cik: '0001649339' },
-  { name: 'Third Point (Loeb)', cik: '0001040273' }
+  { name: 'Third Point (Loeb)', cik: '0001040273' },
+  { name: 'Blackstone', cik: '0001393818', pe: true },
+  { name: 'KKR & Co.', cik: '0001404912', pe: true },
+  { name: 'Apollo Global Management', cik: '0001858681', pe: true },
+  { name: 'Carlyle Group', cik: '0001527166', pe: true }
 ];
 
 let allSignals = [];
@@ -271,6 +315,7 @@ function escHtml(s) {
 
 function fmtMoney(n) {
   if (isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
   if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
   return '$' + n.toFixed(0);
@@ -281,7 +326,9 @@ function fmtMoney(n) {
 // ══════════════════════════════════════════════════════════════
 async function loadInsiderTrades() {
   try {
-    const res = await fetch(SEC_INSIDER_FEED, { headers: { 'Accept': 'application/atom+xml' } });
+    // Direct fetch to SEC fails — their server sends no CORS headers, so the browser
+    // blocks it before any status code is even visible to this script. Proxy it instead.
+    const res = await fetchViaProxyChain(SEC_INSIDER_FEED);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const xml = new DOMParser().parseFromString(text, 'application/xml');
@@ -297,7 +344,7 @@ async function loadInsiderTrades() {
       return { title, updated, link };
     });
 
-    setFreshness('insider', 'Insiders', 'live', 'updated ' + new Date().toLocaleTimeString());
+    setFreshness('insider', 'Insiders', 'active', 'updated ' + new Date().toLocaleTimeString());
 
     const body = document.getElementById('insiders-body');
     body.innerHTML = `
@@ -338,8 +385,121 @@ async function loadInsiderTrades() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// SOURCE 4 — PRIVATE EQUITY (Schedule 13D/13G stake disclosures, live feed)
+// ══════════════════════════════════════════════════════════════
+async function loadPrivateEquity() {
+  try {
+    const res = await fetchViaProxyChain(SEC_PE_FEED);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    if (xml.querySelector('parsererror')) throw new Error('Feed did not parse as XML');
+
+    const entries = Array.from(xml.querySelectorAll('entry')).slice(0, 40);
+    if (!entries.length) throw new Error('No entries returned');
+
+    const rows = entries.map(e => {
+      const title = e.querySelector('title')?.textContent || 'Unknown filer';
+      const updated = e.querySelector('updated')?.textContent || '';
+      const link = e.querySelector('link')?.getAttribute('href') || '#';
+      const is13D = /13D/i.test(title);
+      return { title, updated, link, kind: is13D ? 'SC 13D (active stake)' : 'SC 13G (passive stake)' };
+    });
+
+    setFreshness('pe', 'Private Equity', 'active', 'updated ' + new Date().toLocaleTimeString());
+
+    const body = document.getElementById('pe-body');
+    body.innerHTML = `
+      <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+        Schedule 13D/13G filings are triggered when any investor — often a PE firm or activist — crosses 5% ownership of a public company.
+        13D signals possible intent to influence the company; 13G signals a passive stake. This is the closest thing to a real-time "stake-building" signal, since 13F only shows quarterly snapshots.
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Filer</th><th>Type</th><th>Filed</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.title)}</td>
+              <td>${escHtml(r.kind)}</td>
+              <td class="mono" style="color:var(--text-muted)">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
+              <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">View filing →</a></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    rows.slice(0, 6).forEach(r => {
+      allSignals.push({
+        source: 'pe', tag: 'PRIVATE EQUITY', entity: r.title,
+        detail: `New ${r.kind} filed with the SEC`, direction: 'neutral',
+        time: r.updated, link: r.link, sortValue: r.updated ? new Date(r.updated).getTime() : 0
+      });
+    });
+    renderSignals();
+  } catch (err) {
+    setFreshness('pe', 'Private Equity', 'stale', 'unreachable');
+    document.getElementById('pe-body').innerHTML = `
+      <div class="status-box error">
+        Couldn't reach the live SEC filing feed from this page (${escHtml(err.message)}).<br>
+        This can happen if SEC's server blocks direct browser requests from this domain.<br><br>
+        You can always check the source directly: <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SC+13" target="_blank" rel="noopener">sec.gov Schedule 13D/13G filings →</a>
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // SOURCE 2 — INSTITUTIONAL HOLDINGS (13F, curated watchlist)
 // ══════════════════════════════════════════════════════════════
+// Fetches the list of files inside a specific filing's accession folder, finds
+// the "information table" document (the actual holdings list — filename varies
+// by filer/year, so this can't be hardcoded), then fetches and parses it.
+// SEC's own Form 13F instructions specify the reported value is in thousands of
+// dollars, so raw values are multiplied by 1000 to get actual dollar amounts.
+async function fetchInfoTableHoldings(cik, accessionNoDashes) {
+  const cikTrimmed = String(parseInt(cik, 10));
+  const dirUrl = `https://www.sec.gov/Archives/edgar/data/${cikTrimmed}/${accessionNoDashes}/`;
+  const indexUrl = dirUrl + 'index.json';
+
+  async function fetchDirect(url) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    } catch (e) {
+      return await fetchViaProxyChain(url);
+    }
+  }
+
+  const idxRes = await fetchDirect(indexUrl);
+  const idxData = await idxRes.json();
+  const files = idxData.directory?.item || [];
+  const infoTableFile = files.find(f => /info.*table/i.test(f.name) && /\.xml$/i.test(f.name));
+  if (!infoTableFile) throw new Error('No information table found in filing');
+
+  const xmlRes = await fetchDirect(dirUrl + infoTableFile.name);
+  const xmlText = await xmlRes.text();
+  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (xml.querySelector('parsererror')) throw new Error('Information table did not parse as XML');
+
+  const entries = Array.from(xml.getElementsByTagName('infoTable'));
+  const holdings = entries.map(entry => {
+    const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
+    const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
+    const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
+    return {
+      issuer: getTag('nameOfIssuer'),
+      cusip: getTag('cusip'),
+      valueUsd: rawValue * 1000, // SEC reports this field in thousands of dollars
+      shares
+    };
+  }).filter(h => h.issuer);
+
+  holdings.sort((a, b) => b.valueUsd - a.valueUsd);
+  const totalValue = holdings.reduce((sum, h) => sum + h.valueUsd, 0);
+  return { holdings, totalValue, positionCount: holdings.length };
+}
+
 async function loadInstitutions() {
   const body = document.getElementById('institutions-body');
   body.innerHTML = '';
@@ -365,16 +525,40 @@ async function loadInstitutions() {
 
       const card = document.createElement('div');
       card.className = 'fund-card';
+      const peTag = fund.pe ? '<span class="signal-tag institution" style="margin-left:6px">PE</span>' : '';
+
+      let summaryHtml = '<div class="status-box" style="padding:16px;font-size:11px;text-align:left"><div class="spinner" style="margin:0 auto 8px"></div>Parsing holdings…</div>';
       card.innerHTML = `
-        <div class="fund-name">${escHtml(fund.name)}</div>
+        <div class="fund-name">${escHtml(fund.name)} ${peTag}</div>
         <div class="fund-meta">Last 13F filed ${escHtml(filingDate)}</div>
-        <div class="status-box" style="padding:16px;font-size:11px;text-align:left">
-          Position-level holdings require parsing this filing's information table directly.
-        </div>
-        <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">View full 13F on SEC EDGAR →</a>
+        <div id="holdings-${fund.cik}">${summaryHtml}</div>
+        <a class="fund-link" href="fund.html?cik=${fund.cik}&name=${encodeURIComponent(fund.name)}" style="font-weight:600">📊 Full holdings & quarter-over-quarter changes →</a>
+        <div style="margin-top:6px"><a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener" style="font-size:10px;opacity:0.7">View raw filing on SEC EDGAR →</a></div>
       `;
       body.appendChild(card);
       anySuccess = true;
+
+      // Fetch and parse the actual holdings — done after the card renders so the
+      // rest of the watchlist doesn't wait on this fund's parsing to finish.
+      fetchInfoTableHoldings(fund.cik, accessionNo).then(({ holdings, totalValue, positionCount }) => {
+        const holdingsEl = document.getElementById('holdings-' + fund.cik);
+        if (!holdingsEl) return;
+        const top5 = holdings.slice(0, 5);
+        holdingsEl.innerHTML = `
+          <div class="fund-meta" style="margin-bottom:8px">${positionCount} positions · ${fmtMoney(totalValue)} total reported value</div>
+          <div class="fund-holdings">
+            ${top5.map(h => `
+              <div class="fund-holding-row">
+                <span>${escHtml(h.issuer)}</span>
+                <span class="ticker">${fmtMoney(h.valueUsd)}${totalValue ? ' · ' + ((h.valueUsd / totalValue) * 100).toFixed(1) + '%' : ''}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }).catch(err => {
+        const holdingsEl = document.getElementById('holdings-' + fund.cik);
+        if (holdingsEl) holdingsEl.innerHTML = `<div class="status-box error" style="padding:10px;font-size:11px;text-align:left">Couldn't parse holdings: ${escHtml(err.message)}</div>`;
+      });
 
       allSignals.push({
         source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
@@ -392,26 +576,73 @@ async function loadInstitutions() {
     }
   }
 
-  setFreshness('institution', 'Hedge Funds', anySuccess ? 'stale' : 'stale', 'quarterly, up to 45-day lag');
+  setFreshness('institution', 'Hedge Funds', anySuccess ? 'active' : 'stale', 'quarterly, up to 45-day lag');
   renderSignals();
 }
 
 // ══════════════════════════════════════════════════════════════
 // SOURCE 3 — CONGRESSIONAL TRADES
 // ══════════════════════════════════════════════════════════════
+function parseCongressCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else { inQuotes = false; } }
+      else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
 async function loadCongressTrades() {
   try {
-    const res = await fetch(CONGRESS_HOUSE_URL);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!Array.isArray(data) || !data.length) throw new Error('Empty dataset returned');
+    // Try a direct fetch first (works if the S3 bucket allows it); fall back to
+    // the proxy chain if the bucket's CORS policy blocks direct browser access.
+    let res;
+    try {
+      res = await fetch(CONGRESS_HOUSE_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    } catch (directErr) {
+      res = await fetchViaProxyChain(CONGRESS_HOUSE_URL);
+    }
+    const text = await res.text();
+    const parsed = parseCongressCSV(text);
+    if (parsed.length < 2) throw new Error('Empty dataset returned');
+
+    const headers = parsed[0].map(h => h.trim());
+    const col = name => headers.indexOf(name);
+    const idx = {
+      disclosure_date: col('disclosure_date'), transaction_date: col('transaction_date'),
+      ticker: col('ticker'), type: col('type'), amount: col('amount'), representative: col('representative')
+    };
+
+    const data = parsed.slice(1).filter(r => r.length > 1).map(r => ({
+      disclosure_date: r[idx.disclosure_date] || '',
+      transaction_date: r[idx.transaction_date] || '',
+      ticker: r[idx.ticker] || '',
+      type: r[idx.type] || '',
+      amount: r[idx.amount] || '',
+      representative: r[idx.representative] || ''
+    }));
 
     const rows = data
       .filter(t => t.transaction_date)
       .sort((a, b) => new Date(b.disclosure_date || b.transaction_date) - new Date(a.disclosure_date || a.transaction_date))
       .slice(0, 40);
 
-    setFreshness('congress', 'Congress', 'stale', 'up to 45-day lag');
+    setFreshness('congress', 'Congress', 'active', 'up to 45-day lag');
 
     const body = document.getElementById('congress-body');
     body.innerHTML = `
@@ -420,7 +651,7 @@ async function loadCongressTrades() {
         <tbody>
           ${rows.map(r => `
             <tr>
-              <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
+              <td>${escHtml(r.representative || 'Unknown')}</td>
               <td class="ticker">${escHtml(r.ticker || '—')}</td>
               <td>${escHtml(r.type || '—')}</td>
               <td class="num">${escHtml(r.amount || '—')}</td>
@@ -435,7 +666,7 @@ async function loadCongressTrades() {
       const isBuy = /purchase|buy/i.test(r.type || '');
       const isSell = /sale|sell/i.test(r.type || '');
       allSignals.push({
-        source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
+        source: 'congress', tag: 'CONGRESS', entity: (r.representative || 'Unknown') + ' — ' + (r.ticker || ''),
         detail: `${r.type || 'Trade'} disclosed ${r.disclosure_date || ''}`, direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
         time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0
       });
@@ -467,7 +698,7 @@ function renderSignals() {
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
       </div>
-      <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
+      <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : s.source === 'pe' ? 'pe' : 'congress'}">${escHtml(s.tag)}</div>
       <div class="signal-meta">${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
     </div>
   `).join('');
@@ -478,6 +709,7 @@ function renderSignals() {
 // ══════════════════════════════════════════════════════════════
 loadInsiderTrades();
 loadInstitutions();
+loadPrivateEquity();
 loadCongressTrades();
 </script>
 </body>
