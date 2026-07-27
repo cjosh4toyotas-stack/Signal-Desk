@@ -1,0 +1,9 @@
+name = "signal-desk-alpaca-proxy"
+main = "alpaca-proxy-worker.js"
+compatibility_date = "2026-07-27"
+
+# Secrets (APCA_API_KEY_ID, APCA_API_SECRET_KEY) are NOT set here.
+# Set them with:
+#   wrangler secret put APCA_API_KEY_ID
+#   wrangler secret put APCA_API_SECRET_KEY
+# They're encrypted and never appear in this file or in source control.
