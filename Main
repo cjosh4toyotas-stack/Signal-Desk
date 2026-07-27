@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Desk — Public Disclosure Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d0b08;
+  --surface: #17140f;
+  --surface2: #1f1b14;
+  --border: rgba(255,180,84,0.12);
+  --amber: #ffb454;
+  --amber-dim: rgba(255,180,84,0.14);
+  --amber-glow: rgba(255,180,84,0.35);
+  --teal: #4fd1c5;
+  --teal-dim: rgba(79,209,197,0.12);
+  --rose: #e08a8a;
+  --rose-dim: rgba(224,138,138,0.12);
+  --text: #f5f0e6;
+  --text-dim: rgba(245,240,230,0.6);
+  --text-muted: rgba(245,240,230,0.32);
+}
+
+html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+/* ── SCANLINE TEXTURE ─────────────────────────────────────── */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 3px);
+}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 32px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 6px;
+  background: var(--amber-dim); border: 1px solid var(--amber-glow);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
+}
+.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+.brand-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
+
+.freshness-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.freshness-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--text-dim);
+}
+.freshness-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.freshness-dot.live { background: var(--teal); box-shadow: 0 0 6px var(--teal); animation: pulse-dot 2s infinite; }
+.freshness-dot.stale { background: var(--rose); }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── LAYOUT ───────────────────────────────────────────────── */
+main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; padding: 32px; }
+
+.hero {
+  display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.hero-title { font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; }
+.hero-title span { color: var(--amber); }
+.hero-sub { font-size: 13px; color: var(--text-dim); margin-top: 8px; max-width: 520px; line-height: 1.5; }
+.hero-note {
+  font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; max-width: 260px; line-height: 1.6;
+}
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim);
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
+  cursor: pointer; transition: all .15s;
+}
+.tab-btn:hover { border-color: var(--amber-glow); color: var(--text); }
+.tab-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; animation: fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── SIGNAL CARDS ─────────────────────────────────────────── */
+.signal-list { display: flex; flex-direction: column; gap: 10px; }
+.signal-row {
+  display: grid; grid-template-columns: auto 1fr auto auto; gap: 16px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; transition: border-color .15s;
+}
+.signal-row:hover { border-color: var(--amber-glow); }
+.ping-wrap { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ping { border-radius: 50%; position: relative; }
+.ping.buy { background: var(--teal); box-shadow: 0 0 10px var(--teal); }
+.ping.sell { background: var(--rose); box-shadow: 0 0 10px var(--rose); }
+.ping.neutral { background: var(--text-muted); }
+.signal-main { min-width: 0; }
+.signal-entity { font-weight: 600; font-size: 14px; }
+.signal-detail { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.signal-tag {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+.signal-tag.insider { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
+.signal-tag.institution { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(79,209,197,0.35); }
+.signal-tag.congress { background: rgba(180,150,255,0.12); color: #b496ff; border: 1px solid rgba(180,150,255,0.35); }
+.signal-meta { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+/* ── TABLE ────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--text-dim);
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.data-table tr:hover td { background: rgba(255,255,255,0.015); }
+.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+
+/* ── STATUS / EMPTY STATES ────────────────────────────────── */
+.status-box {
+  padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 12px;
+  color: var(--text-muted); font-size: 13px; line-height: 1.7;
+}
+.status-box.error { border-color: rgba(224,138,138,0.3); color: var(--rose); }
+.status-box code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; }
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber);
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── WATCHLIST CARDS (institutions) ───────────────────────── */
+.fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.fund-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+.fund-meta { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
+.fund-holdings { display: flex; flex-direction: column; gap: 6px; }
+.fund-holding-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.fund-holding-row:last-child { border-bottom: none; }
+.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
+.fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
+.fund-link:hover { text-decoration: underline; }
+
+footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+footer a { color: var(--amber); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">◎</div>
+    <div>
+      <div class="brand-text">SIGNAL DESK</div>
+      <div class="brand-sub">PUBLIC DISCLOSURE TRACKER</div>
+    </div>
+  </div>
+  <div class="freshness-row" id="freshness-row"></div>
+</header>
+
+<main>
+  <div class="hero">
+    <div>
+      <div class="hero-title">Follow the <span>money</span>, legally.</div>
+      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
+    </div>
+    <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">⚡ Top Signals</button>
+    <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
+    <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
+    <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
+  </div>
+
+  <!-- TOP SIGNALS -->
+  <div class="tab-panel active" id="tab-signals">
+    <div id="signals-body" class="signal-list">
+      <div class="status-box"><div class="spinner"></div>Gathering signals across all three sources…</div>
+    </div>
+  </div>
+
+  <!-- INSIDER TRADES -->
+  <div class="tab-panel" id="tab-insiders">
+    <div id="insiders-body">
+      <div class="status-box"><div class="spinner"></div>Fetching the latest Form 4 filings from SEC EDGAR…</div>
+    </div>
+  </div>
+
+  <!-- INSTITUTIONS / 13F -->
+  <div class="tab-panel" id="tab-institutions">
+    <div id="institutions-body" class="fund-grid">
+      <div class="status-box"><div class="spinner"></div>Loading latest 13F filings for the tracked fund list…</div>
+    </div>
+  </div>
+
+  <!-- CONGRESS -->
+  <div class="tab-panel" id="tab-congress">
+    <div id="congress-body">
+      <div class="status-box"><div class="spinner"></div>Fetching congressional trade disclosures…</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Data sourced from SEC EDGAR (data.sec.gov) and public congressional disclosure datasets. Congressional and 13F data carry legally mandated reporting delays — see header badges for freshness.
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIG — data sources. Update these if a source moves.
+// ══════════════════════════════════════════════════════════════
+const SEC_INSIDER_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
+const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
+const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+
+// Curated watchlist of well-known institutional investors and their SEC CIK numbers.
+// Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
+const FUND_WATCHLIST = [
+  { name: 'Berkshire Hathaway', cik: '0001067983' },
+  { name: 'Bridgewater Associates', cik: '0001350694' },
+  { name: 'Renaissance Technologies', cik: '0001037389' },
+  { name: 'Pershing Square Capital (Ackman)', cik: '0001336528' },
+  { name: 'Scion Asset Management (Burry)', cik: '0001649339' },
+  { name: 'Third Point (Loeb)', cik: '0001040273' }
+];
+
+let allSignals = [];
+
+// ══════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+function setFreshness(id, label, status, detail) {
+  let row = document.getElementById('freshness-row');
+  let pill = document.getElementById('fresh-' + id);
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.className = 'freshness-pill';
+    pill.id = 'fresh-' + id;
+    row.appendChild(pill);
+  }
+  pill.innerHTML = `<span class="freshness-dot ${status}"></span>${label}${detail ? ' · ' + detail : ''}`;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtMoney(n) {
+  if (isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+  return '$' + n.toFixed(0);
+}
+
+// ══════════════════════════════════════════════════════════════
+// SOURCE 1 — INSIDER TRADES (SEC Form 4, live feed)
+// ══════════════════════════════════════════════════════════════
+async function loadInsiderTrades() {
+  try {
+    const res = await fetch(SEC_INSIDER_FEED, { headers: { 'Accept': 'application/atom+xml' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    if (xml.querySelector('parsererror')) throw new Error('Feed did not parse as XML');
+
+    const entries = Array.from(xml.querySelectorAll('entry')).slice(0, 40);
+    if (!entries.length) throw new Error('No entries returned');
+
+    const rows = entries.map(e => {
+      const title = e.querySelector('title')?.textContent || 'Unknown filer';
+      const updated = e.querySelector('updated')?.textContent || '';
+      const link = e.querySelector('link')?.getAttribute('href') || '#';
+      return { title, updated, link };
+    });
+
+    setFreshness('insider', 'Insiders', 'live', 'updated ' + new Date().toLocaleTimeString());
+
+    const body = document.getElementById('insiders-body');
+    body.innerHTML = `
+      <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+        This is the raw SEC filing feed — every Form 4 hitting EDGAR right now, market-wide. Click through to any filing to see the actual transaction (shares, price, buy or sell).
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Filer / Company</th><th>Filed</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.title)}</td>
+              <td class="mono" style="color:var(--text-muted)">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
+              <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">View filing →</a></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    rows.slice(0, 6).forEach(r => {
+      allSignals.push({
+        source: 'insider', tag: 'INSIDER', entity: r.title,
+        detail: 'New Form 4 filed with the SEC', direction: 'neutral',
+        time: r.updated, link: r.link, sortValue: r.updated ? new Date(r.updated).getTime() : 0
+      });
+    });
+    renderSignals();
+  } catch (err) {
+    setFreshness('insider', 'Insiders', 'stale', 'unreachable');
+    document.getElementById('insiders-body').innerHTML = `
+      <div class="status-box error">
+        Couldn't reach the live SEC filing feed from this page (${escHtml(err.message)}).<br>
+        This can happen if SEC's server blocks direct browser requests from this domain.<br><br>
+        You can always check the source directly: <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4" target="_blank" rel="noopener">sec.gov Form 4 filings →</a>
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SOURCE 2 — INSTITUTIONAL HOLDINGS (13F, curated watchlist)
+// ══════════════════════════════════════════════════════════════
+async function loadInstitutions() {
+  const body = document.getElementById('institutions-body');
+  body.innerHTML = '';
+  let anySuccess = false;
+
+  for (const fund of FUND_WATCHLIST) {
+    try {
+      const res = await fetch(`https://data.sec.gov/submissions/CIK${fund.cik}.json`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const forms = data.filings?.recent;
+      if (!forms) throw new Error('No filing history returned');
+
+      let latest13FIdx = -1;
+      for (let i = 0; i < forms.form.length; i++) {
+        if (forms.form[i].startsWith('13F')) { latest13FIdx = i; break; }
+      }
+      if (latest13FIdx === -1) throw new Error('No 13F on file');
+
+      const accessionNo = forms.accessionNumber[latest13FIdx].replace(/-/g, '');
+      const filingDate = forms.filingDate[latest13FIdx];
+      const filingUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${fund.cik}&type=13F&dateb=&owner=include&count=10`;
+
+      const card = document.createElement('div');
+      card.className = 'fund-card';
+      card.innerHTML = `
+        <div class="fund-name">${escHtml(fund.name)}</div>
+        <div class="fund-meta">Last 13F filed ${escHtml(filingDate)}</div>
+        <div class="status-box" style="padding:16px;font-size:11px;text-align:left">
+          Position-level holdings require parsing this filing's information table directly.
+        </div>
+        <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">View full 13F on SEC EDGAR →</a>
+      `;
+      body.appendChild(card);
+      anySuccess = true;
+
+      allSignals.push({
+        source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
+        detail: `Filed 13F for the quarter — holdings as of ${filingDate}`, direction: 'neutral',
+        time: filingDate, link: filingUrl, sortValue: new Date(filingDate).getTime()
+      });
+    } catch (err) {
+      const card = document.createElement('div');
+      card.className = 'fund-card';
+      card.innerHTML = `
+        <div class="fund-name">${escHtml(fund.name)}</div>
+        <div class="status-box error" style="padding:12px;font-size:11px">Couldn't load: ${escHtml(err.message)}</div>
+      `;
+      body.appendChild(card);
+    }
+  }
+
+  setFreshness('institution', 'Hedge Funds', anySuccess ? 'stale' : 'stale', 'quarterly, up to 45-day lag');
+  renderSignals();
+}
+
+// ══════════════════════════════════════════════════════════════
+// SOURCE 3 — CONGRESSIONAL TRADES
+// ══════════════════════════════════════════════════════════════
+async function loadCongressTrades() {
+  try {
+    const res = await fetch(CONGRESS_HOUSE_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) throw new Error('Empty dataset returned');
+
+    const rows = data
+      .filter(t => t.transaction_date)
+      .sort((a, b) => new Date(b.disclosure_date || b.transaction_date) - new Date(a.disclosure_date || a.transaction_date))
+      .slice(0, 40);
+
+    setFreshness('congress', 'Congress', 'stale', 'up to 45-day lag');
+
+    const body = document.getElementById('congress-body');
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Disclosed</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
+              <td class="ticker">${escHtml(r.ticker || '—')}</td>
+              <td>${escHtml(r.type || '—')}</td>
+              <td class="num">${escHtml(r.amount || '—')}</td>
+              <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    rows.slice(0, 6).forEach(r => {
+      const isBuy = /purchase|buy/i.test(r.type || '');
+      const isSell = /sale|sell/i.test(r.type || '');
+      allSignals.push({
+        source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
+        detail: `${r.type || 'Trade'} disclosed ${r.disclosure_date || ''}`, direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
+        time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0
+      });
+    });
+    renderSignals();
+  } catch (err) {
+    setFreshness('congress', 'Congress', 'stale', 'unreachable');
+    document.getElementById('congress-body').innerHTML = `
+      <div class="status-box error">
+        Couldn't reach the congressional trade dataset (${escHtml(err.message)}).<br>
+        This tracker relies on the open-source <code>house-stock-watcher</code> project's public data file — if that project's hosting has moved,
+        update <code>CONGRESS_HOUSE_URL</code> near the top of this file's script with a current source.<br><br>
+        You can check disclosures directly at <a class="fund-link" href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov →</a>
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMBINED SIGNALS VIEW
+// ══════════════════════════════════════════════════════════════
+function renderSignals() {
+  const body = document.getElementById('signals-body');
+  if (!allSignals.length) return;
+  const sorted = [...allSignals].sort((a, b) => b.sortValue - a.sortValue).slice(0, 20);
+  body.innerHTML = sorted.map(s => `
+    <div class="signal-row">
+      <div class="ping-wrap"><div class="ping ${s.direction}" style="width:${s.direction === 'neutral' ? 10 : 14}px;height:${s.direction === 'neutral' ? 10 : 14}px"></div></div>
+      <div class="signal-main">
+        <div class="signal-entity">${escHtml(s.entity)}</div>
+        <div class="signal-detail">${escHtml(s.detail)}</div>
+      </div>
+      <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
+      <div class="signal-meta">${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════
+loadInsiderTrades();
+loadInstitutions();
+loadCongressTrades();
+</script>
+</body>
+</html>
