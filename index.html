@@ -454,8 +454,10 @@ async function loadPrivateEquity() {
 // Fetches the list of files inside a specific filing's accession folder, finds
 // the "information table" document (the actual holdings list — filename varies
 // by filer/year, so this can't be hardcoded), then fetches and parses it.
-// SEC's own Form 13F instructions specify the reported value is in thousands of
-// dollars, so raw values are multiplied by 1000 to get actual dollar amounts.
+// NOTE ON UNITS: prior to Jan 3, 2023 (EDGAR release 22.4.1), the Value column
+// was reported in thousands of dollars. Since then, the SEC requires it to be
+// reported rounded to the nearest whole dollar. All filings this tracker pulls
+// are recent, so values are used as-is — no ×1000 conversion.
 async function fetchInfoTableHoldings(cik, accessionNoDashes) {
   const cikTrimmed = String(parseInt(cik, 10));
   const dirUrl = `https://www.sec.gov/Archives/edgar/data/${cikTrimmed}/${accessionNoDashes}/`;
@@ -490,7 +492,7 @@ async function fetchInfoTableHoldings(cik, accessionNoDashes) {
     return {
       issuer: getTag('nameOfIssuer'),
       cusip: getTag('cusip'),
-      valueUsd: rawValue * 1000, // SEC reports this field in thousands of dollars
+      valueUsd: rawValue, // already reported in whole dollars (post-2023 filings)
       shares
     };
   }).filter(h => h.issuer);
