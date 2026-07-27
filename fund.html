@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -108,7 +109,7 @@ footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-
 </main>
 
 <footer>
-  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported — in thousands of dollars, converted here to whole dollars.
+  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported for filings since Jan 2023 — rounded to the nearest whole dollar.
 </footer>
 
 <script>
@@ -170,7 +171,7 @@ async function fetchInfoTableHoldings(cik, accessionNoDashes) {
     const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
     const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
     const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
-    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue * 1000, shares };
+    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue, shares }; // already whole dollars (post-2023 filings)
   }).filter(h => h.issuer);
 
   holdings.sort((a, b) => b.valueUsd - a.valueUsd);
