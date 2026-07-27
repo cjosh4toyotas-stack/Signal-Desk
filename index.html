@@ -272,6 +272,49 @@ const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazon
 const SEC_PE_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SC+13&company=&dateb=&owner=include&count=100&output=atom';
 const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
 
+// Price-context proxy (see alpaca-proxy-worker.js). Signal Desk is a static
+// site, so it can't hold Alpaca's secret API keys directly — this points at
+// a small Cloudflare Worker you deploy separately, which holds those keys
+// server-side and exposes just a /bars passthrough. Deploy the worker, then
+// replace this with your own workers.dev URL. Left as-is, price context is
+// skipped (no requests fire) rather than failing noisily.
+const ALPACA_PROXY_URL = 'https://YOUR-WORKER-SUBDOMAIN.workers.dev';
+const alpacaProxyConfigured = !!ALPACA_PROXY_URL && !ALPACA_PROXY_URL.includes('YOUR-WORKER-SUBDOMAIN');
+
+const priceChangeCache = new Map();
+
+// Returns % price change from the first bar's open to the most recent bar's
+// close, between startISO and today, or null if it can't be determined
+// (bad ticker, no bars in range, proxy not configured/unreachable).
+function fetchPriceChangeSinceDisclosure(ticker, startISO) {
+  if (!alpacaProxyConfigured || !ticker || !startISO) return Promise.resolve(null);
+  const cacheKey = ticker + '|' + startISO;
+  if (priceChangeCache.has(cacheKey)) return priceChangeCache.get(cacheKey);
+
+  const endISO = new Date().toISOString().slice(0, 10);
+  const promise = fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(ticker)}&start=${startISO}&end=${endISO}`)
+    .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(data => {
+      const bars = data.bars || [];
+      if (bars.length < 2) return null;
+      const first = bars[0], last = bars[bars.length - 1];
+      if (!first.o) return null;
+      return ((last.c - first.o) / first.o) * 100;
+    })
+    .catch(() => null);
+
+  priceChangeCache.set(cacheKey, promise);
+  return promise;
+}
+
+// Converts loose date strings (e.g. "1/15/2024") to YYYY-MM-DD, or null if unparseable.
+function toISODate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
 // Curated watchlist of well-known institutional investors and their SEC CIK numbers.
 // Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
 const FUND_WATCHLIST = [
@@ -649,20 +692,48 @@ async function loadCongressTrades() {
     const body = document.getElementById('congress-body');
     body.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Disclosed</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Disclosed</th>
+            <th title="${alpacaProxyConfigured ? 'Price change from disclosure date to today (via Alpaca)' : 'Set ALPACA_PROXY_URL in script to enable'}">Since Disclosure</th>
+          </tr>
+        </thead>
         <tbody>
-          ${rows.map(r => `
+          ${rows.map((r, i) => `
             <tr>
               <td>${escHtml(r.representative || 'Unknown')}</td>
               <td class="ticker">${escHtml(r.ticker || '—')}</td>
               <td>${escHtml(r.type || '—')}</td>
               <td class="num">${escHtml(r.amount || '—')}</td>
               <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
+              <td class="num mono" id="price-chg-${i}" style="color:var(--text-muted)">${alpacaProxyConfigured ? '…' : '—'}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
     `;
+
+    // Fill in price-since-disclosure asynchronously, in small concurrent batches,
+    // so the table itself never waits on a slow or unconfigured price source.
+    if (alpacaProxyConfigured) {
+      const BATCH_SIZE = 5;
+      (async () => {
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+          const batch = rows.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(async (r, j) => {
+            const cell = document.getElementById('price-chg-' + (i + j));
+            if (!cell) return;
+            const ticker = (r.ticker || '').trim().toUpperCase();
+            const startISO = toISODate(r.disclosure_date || r.transaction_date);
+            if (!ticker || !startISO) { cell.textContent = '—'; return; }
+            const pct = await fetchPriceChangeSinceDisclosure(ticker, startISO);
+            if (pct === null || pct === undefined || isNaN(pct)) { cell.textContent = '—'; return; }
+            cell.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+            cell.style.color = pct >= 0 ? 'var(--teal)' : 'var(--rose)';
+          }));
+        }
+      })();
+    }
 
     rows.slice(0, 6).forEach(r => {
       const isBuy = /purchase|buy/i.test(r.type || '');
