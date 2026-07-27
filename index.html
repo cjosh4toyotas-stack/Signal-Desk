@@ -18,7 +18,310 @@
   --amber-glow: rgba(255,180,84,0.35);
   --teal: #4fd1c5;
   --teal-dim: rgba(79,209,197,0.12);
+  --rose: #e08a8a;<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fund Detail — Signal Desk</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d0b08; --surface: #17140f; --surface2: #1f1b14;
+  --border: rgba(255,180,84,0.12); --amber: #ffb454; --amber-dim: rgba(255,180,84,0.14); --amber-glow: rgba(255,180,84,0.35);
+  --teal: #4fd1c5; --teal-dim: rgba(79,209,197,0.12);
   --rose: #e08a8a;
+  --green: #4ade80;
+  --text: #f5f0e6; --text-dim: rgba(245,240,230,0.6); --text-muted: rgba(245,240,230,0.32);
+}
+html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+header {
+  position: sticky; top: 0; z-index: 10; background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border); padding: 18px 32px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 6px; background: var(--amber-dim); border: 1px solid var(--amber-glow);
+  display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
+}
+.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+.brand-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
+.back-link { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--teal); text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 32px; }
+
+.fund-header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.fund-title { font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; }
+.fund-sub { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-top: 6px; }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 700; color: var(--amber); }
+.stat-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+
+.section-title { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; margin: 32px 0 14px; display: flex; align-items: center; gap: 10px; }
+.section-count { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); font-weight: 400; }
+
+.change-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.change-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.change-card.new { border-left: 3px solid var(--green); }
+.change-card.closed { border-left: 3px solid var(--rose); }
+.change-card.up { border-left: 3px solid var(--teal); }
+.change-card.down { border-left: 3px solid var(--amber); }
+.change-issuer { font-weight: 600; font-size: 13px; }
+.change-detail { font-size: 11px; color: var(--text-dim); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.data-table th {
+  text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--text-dim);
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.data-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.data-table tr:hover td { background: rgba(255,255,255,0.015); }
+.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); }
+
+.status-box { padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 12px; color: var(--text-muted); font-size: 13px; line-height: 1.7; }
+.status-box.error { border-color: rgba(224,138,138,0.3); color: var(--rose); }
+.status-box code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fund-link { color: var(--teal); font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-decoration: none; }
+.fund-link:hover { text-decoration: underline; }
+.empty-note { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 12px 0; }
+
+footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="index.html">
+    <div class="brand-mark">◎</div>
+    <div>
+      <div class="brand-text">SIGNAL DESK</div>
+      <div class="brand-sub">FUND DETAIL</div>
+    </div>
+  </a>
+  <a class="back-link" href="index.html">← Back to all sources</a>
+</header>
+
+<main>
+  <div class="fund-header">
+    <div class="fund-title" id="fund-title">Loading…</div>
+    <div class="fund-sub" id="fund-sub"></div>
+  </div>
+
+  <div id="page-body">
+    <div class="status-box"><div class="spinner"></div>Fetching filing history from SEC EDGAR…</div>
+  </div>
+</main>
+
+<footer>
+  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported — in thousands of dollars, converted here to whole dollars.
+</footer>
+
+<script>
+const CORS_PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+];
+
+async function fetchViaProxyChain(targetUrl) {
+  let lastErr = null;
+  for (const buildProxyUrl of CORS_PROXIES) {
+    try {
+      const res = await fetch(buildProxyUrl(targetUrl));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr || new Error('All proxies failed');
+}
+
+async function fetchDirect(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res;
+  } catch (e) {
+    return await fetchViaProxyChain(url);
+  }
+}
+
+function escHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function fmtMoney(n) {
+  if (isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+  return '$' + n.toFixed(0);
+}
+function fmtShares(n) { return Math.round(n).toLocaleString('en-US'); }
+
+async function fetchInfoTableHoldings(cik, accessionNoDashes) {
+  const cikTrimmed = String(parseInt(cik, 10));
+  const dirUrl = `https://www.sec.gov/Archives/edgar/data/${cikTrimmed}/${accessionNoDashes}/`;
+  const idxRes = await fetchDirect(dirUrl + 'index.json');
+  const idxData = await idxRes.json();
+  const files = idxData.directory?.item || [];
+  const infoTableFile = files.find(f => /info.*table/i.test(f.name) && /\.xml$/i.test(f.name));
+  if (!infoTableFile) throw new Error('No information table found in filing');
+
+  const xmlRes = await fetchDirect(dirUrl + infoTableFile.name);
+  const xmlText = await xmlRes.text();
+  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (xml.querySelector('parsererror')) throw new Error('Information table did not parse as XML');
+
+  const entries = Array.from(xml.getElementsByTagName('infoTable'));
+  const holdings = entries.map(entry => {
+    const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
+    const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
+    const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
+    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue * 1000, shares };
+  }).filter(h => h.issuer);
+
+  holdings.sort((a, b) => b.valueUsd - a.valueUsd);
+  const totalValue = holdings.reduce((sum, h) => sum + h.valueUsd, 0);
+  return { holdings, totalValue, positionCount: holdings.length };
+}
+
+function renderChangeCard(kind, issuer, detail) {
+  return `<div class="change-card ${kind}"><div class="change-issuer">${escHtml(issuer)}</div><div class="change-detail">${detail}</div></div>`;
+}
+
+async function loadFundDetail() {
+  const params = new URLSearchParams(window.location.search);
+  const cik = params.get('cik');
+  const name = params.get('name') || 'Unknown Fund';
+  document.getElementById('fund-title').textContent = name;
+
+  if (!cik) {
+    document.getElementById('page-body').innerHTML = `<div class="status-box error">No fund specified. Go back and click a fund's "Full detail" link from the main dashboard.</div>`;
+    return;
+  }
+
+  try {
+    const subRes = await fetchDirect(`https://data.sec.gov/submissions/CIK${cik}.json`);
+    const subData = await subRes.json();
+    const forms = subData.filings?.recent;
+    if (!forms) throw new Error('No filing history returned');
+
+    const thirteenFIdxs = [];
+    for (let i = 0; i < forms.form.length && thirteenFIdxs.length < 2; i++) {
+      if (forms.form[i].startsWith('13F-HR')) thirteenFIdxs.push(i);
+    }
+    if (!thirteenFIdxs.length) throw new Error('No 13F-HR filings on record for this fund');
+
+    const latestIdx = thirteenFIdxs[0];
+    const priorIdx = thirteenFIdxs.length > 1 ? thirteenFIdxs[1] : null;
+    const latestDate = forms.filingDate[latestIdx];
+    const priorDate = priorIdx !== null ? forms.filingDate[priorIdx] : null;
+
+    document.getElementById('fund-sub').textContent =
+      priorDate ? `Comparing filing from ${latestDate} against prior filing from ${priorDate}` : `Filing from ${latestDate} — no prior 13F-HR on record to compare against`;
+
+    const latestAcc = forms.accessionNumber[latestIdx].replace(/-/g, '');
+    const current = await fetchInfoTableHoldings(cik, latestAcc);
+
+    let prior = null;
+    if (priorIdx !== null) {
+      const priorAcc = forms.accessionNumber[priorIdx].replace(/-/g, '');
+      try { prior = await fetchInfoTableHoldings(cik, priorAcc); } catch (e) { /* proceed without comparison */ }
+    }
+
+    const body = document.getElementById('page-body');
+    let html = `
+      <div class="stat-row">
+        <div class="stat-card"><div class="stat-value">${fmtMoney(current.totalValue)}</div><div class="stat-label">Total Reported Value</div></div>
+        <div class="stat-card"><div class="stat-value">${current.positionCount}</div><div class="stat-label">Positions Held</div></div>
+        <div class="stat-card"><div class="stat-value">${current.holdings.length ? ((current.holdings.slice(0,5).reduce((s,h)=>s+h.valueUsd,0) / current.totalValue) * 100).toFixed(0) + '%' : '—'}</div><div class="stat-label">In Top 5 Holdings</div></div>
+      </div>
+    `;
+
+    if (prior) {
+      const priorByCusip = {};
+      prior.holdings.forEach(h => { priorByCusip[h.cusip] = h; });
+      const currentByCusip = {};
+      current.holdings.forEach(h => { currentByCusip[h.cusip] = h; });
+
+      const newPositions = current.holdings.filter(h => !priorByCusip[h.cusip]).sort((a,b) => b.valueUsd - a.valueUsd);
+      const closedPositions = prior.holdings.filter(h => !currentByCusip[h.cusip]).sort((a,b) => b.valueUsd - a.valueUsd);
+      const changed = current.holdings
+        .filter(h => priorByCusip[h.cusip] && priorByCusip[h.cusip].shares !== h.shares)
+        .map(h => ({ ...h, priorShares: priorByCusip[h.cusip].shares, pctChange: ((h.shares - priorByCusip[h.cusip].shares) / priorByCusip[h.cusip].shares) * 100 }));
+      const increased = changed.filter(h => h.pctChange > 0).sort((a,b) => b.pctChange - a.pctChange);
+      const decreased = changed.filter(h => h.pctChange < 0).sort((a,b) => a.pctChange - b.pctChange);
+
+      html += `<div class="section-title">🟢 New Positions <span class="section-count">${newPositions.length}</span></div>`;
+      html += newPositions.length
+        ? `<div class="change-grid">${newPositions.slice(0,12).map(h => renderChangeCard('new', h.issuer, fmtShares(h.shares) + ' shares · ' + fmtMoney(h.valueUsd))).join('')}</div>`
+        : `<div class="empty-note">No new positions opened since the prior filing.</div>`;
+
+      html += `<div class="section-title">🔴 Closed Positions <span class="section-count">${closedPositions.length}</span></div>`;
+      html += closedPositions.length
+        ? `<div class="change-grid">${closedPositions.slice(0,12).map(h => renderChangeCard('closed', h.issuer, 'Fully exited · was ' + fmtMoney(h.valueUsd))).join('')}</div>`
+        : `<div class="empty-note">No positions were fully closed since the prior filing.</div>`;
+
+      html += `<div class="section-title">📈 Increased Stakes <span class="section-count">${increased.length}</span></div>`;
+      html += increased.length
+        ? `<div class="change-grid">${increased.slice(0,12).map(h => renderChangeCard('up', h.issuer, '+' + h.pctChange.toFixed(0) + '% · ' + fmtShares(h.priorShares) + ' → ' + fmtShares(h.shares) + ' shares')).join('')}</div>`
+        : `<div class="empty-note">No existing positions were increased since the prior filing.</div>`;
+
+      html += `<div class="section-title">📉 Decreased Stakes <span class="section-count">${decreased.length}</span></div>`;
+      html += decreased.length
+        ? `<div class="change-grid">${decreased.slice(0,12).map(h => renderChangeCard('down', h.issuer, h.pctChange.toFixed(0) + '% · ' + fmtShares(h.priorShares) + ' → ' + fmtShares(h.shares) + ' shares')).join('')}</div>`
+        : `<div class="empty-note">No existing positions were decreased since the prior filing.</div>`;
+    } else {
+      html += `<div class="empty-note">No prior 13F-HR filing found for this fund — quarter-over-quarter comparison isn't available yet, but the full current holdings are below.</div>`;
+    }
+
+    html += `<div class="section-title">All Holdings <span class="section-count">${current.holdings.length} positions, sorted by value</span></div>`;
+    html += `
+      <table class="data-table">
+        <thead><tr><th>Issuer</th><th>Shares</th><th>Value</th><th>% of Portfolio</th></tr></thead>
+        <tbody>
+          ${current.holdings.map(h => `
+            <tr>
+              <td>${escHtml(h.issuer)}</td>
+              <td class="num">${fmtShares(h.shares)}</td>
+              <td class="num ticker">${fmtMoney(h.valueUsd)}</td>
+              <td class="num">${current.totalValue ? ((h.valueUsd / current.totalValue) * 100).toFixed(1) + '%' : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    html += `<div style="margin-top:20px"><a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=13F&dateb=&owner=include&count=10" target="_blank" rel="noopener">View raw filing on SEC EDGAR →</a></div>`;
+
+    body.innerHTML = html;
+  } catch (err) {
+    document.getElementById('page-body').innerHTML = `
+      <div class="status-box error">
+        Couldn't load this fund's filing data (${escHtml(err.message)}).<br><br>
+        You can check it directly at <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${escHtml(cik || '')}&type=13F" target="_blank" rel="noopener">sec.gov EDGAR →</a>
+      </div>`;
+  }
+}
+
+loadFundDetail();
+</script>
+</body>
+</html>
+
   --rose-dim: rgba(224,138,138,0.12);
   --text: #f5f0e6;
   --text-dim: rgba(245,240,230,0.6);
