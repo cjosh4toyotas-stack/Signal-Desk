@@ -4,58 +4,93 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Signal Desk — Public Disclosure Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600..900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0d0b08;
-  --surface: #17140f;
-  --surface2: #1f1b14;
-  --border: rgba(255,180,84,0.12);
-  --amber: #ffb454;
-  --amber-dim: rgba(255,180,84,0.14);
-  --amber-glow: rgba(255,180,84,0.35);
-  --teal: #4fd1c5;
-  --teal-dim: rgba(79,209,197,0.12);
-  --rose: #e08a8a;
-  --rose-dim: rgba(224,138,138,0.12);
-  --text: #f5f0e6;
-  --text-dim: rgba(245,240,230,0.6);
-  --text-muted: rgba(245,240,230,0.32);
+  /* Obsidian + brass — dark, cool-neutral base with a bullion-gold accent.
+     Variable names kept as-is from the prior theme (--amber/--teal/--rose)
+     to avoid touching every usage site; the hex values are what changed. */
+  --bg: #08080a;
+  --surface: #121215;
+  --surface2: #1a1a1e;
+  --border: rgba(201,169,97,0.16);
+  --amber: #c9a961;
+  --amber-dim: rgba(201,169,97,0.14);
+  --amber-glow: rgba(201,169,97,0.42);
+  --teal: #34d399;
+  --teal-dim: rgba(52,211,153,0.12);
+  --rose: #f0465c;
+  --rose-dim: rgba(240,70,92,0.12);
+  --violet: #a78bfa;
+  --violet-dim: rgba(167,139,250,0.12);
+  --text: #eeece6;
+  --text-dim: rgba(238,236,230,0.62);
+  --text-muted: rgba(238,236,230,0.34);
 }
 
 html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
+.serif { font-family: 'Fraunces', serif; }
 
-/* ── SCANLINE TEXTURE ─────────────────────────────────────── */
+/* ── AMBIENT LIGHT (replaces the old scanline texture) ───────
+   A quiet gold + emerald glow from opposite corners, like light off
+   glass on a trading floor — not a decorative gradient, restrained. */
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
-  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 3px);
+  background:
+    radial-gradient(ellipse 900px 520px at 12% -8%, rgba(201,169,97,0.10), transparent 62%),
+    radial-gradient(ellipse 700px 480px at 104% 4%, rgba(52,211,153,0.05), transparent 60%);
+}
+
+/* ── TICKER TAPE ──────────────────────────────────────────── */
+.ticker-tape {
+  position: relative; height: 32px; overflow: hidden; white-space: nowrap;
+  background: var(--surface2); border-bottom: 1px solid var(--border);
+}
+.ticker-tape::before, .ticker-tape::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 64px; z-index: 2; pointer-events: none;
+}
+.ticker-tape::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
+.ticker-tape::after { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
+.ticker-tape-track {
+  display: inline-flex; align-items: center; height: 100%; padding-left: 100%;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: 0.2px;
+  animation: tape-scroll 38s linear infinite;
+}
+.ticker-tape-track:hover { animation-play-state: paused; }
+@keyframes tape-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker-tape-item { display: inline-flex; align-items: center; gap: 8px; padding: 0 22px; color: var(--text-dim); border-right: 1px solid var(--border); }
+.ticker-tape-item .tt-sym { color: var(--amber); font-weight: 600; }
+.ticker-tape-item .tt-chg.up { color: var(--teal); }
+.ticker-tape-item .tt-chg.down { color: var(--rose); }
+.ticker-tape-msg { color: var(--text-muted); padding: 0 22px; }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-tape-track { animation: none; padding-left: 16px; }
 }
 
 /* ── HEADER ───────────────────────────────────────────────── */
 header {
   position: sticky; top: 0; z-index: 10;
-  background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
+  background: rgba(8,8,10,0.88); backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
   padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark {
-  width: 34px; height: 34px; border-radius: 6px;
-  background: var(--amber-dim); border: 1px solid var(--amber-glow);
+  width: 36px; height: 36px; border-radius: 4px;
+  background: var(--amber-dim); border: 1px solid var(--amber-glow); color: var(--amber);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
 }
-.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-.brand-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
+.brand-text { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 700; letter-spacing: 0.2px; }
+.brand-sub { font-size: 10.5px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.5px; margin-top: 2px; }
 
 .freshness-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .freshness-pill {
   display: flex; align-items: center; gap: 7px;
-  padding: 6px 12px; border-radius: 20px;
+  padding: 6px 12px; border-radius: 4px;
   background: var(--surface); border: 1px solid var(--border);
   font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--text-dim);
 }
@@ -71,18 +106,18 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;
   margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
-.hero-title { font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; }
+.hero-title { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 700; line-height: 1.08; letter-spacing: -0.3px; }
 .hero-title span { color: var(--amber); }
-.hero-sub { font-size: 13px; color: var(--text-dim); margin-top: 8px; max-width: 520px; line-height: 1.5; }
+.hero-sub { font-size: 13px; color: var(--text-dim); margin-top: 10px; max-width: 520px; line-height: 1.5; }
 .hero-note {
   font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;
-  border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; max-width: 260px; line-height: 1.6;
+  border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; max-width: 260px; line-height: 1.6;
 }
 
 /* ── TABS ─────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
 .tab-btn {
-  padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
+  padding: 10px 18px; border-radius: 4px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text-dim);
   font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
   cursor: pointer; transition: all .15s;
@@ -97,7 +132,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .signal-list { display: flex; flex-direction: column; gap: 10px; }
 .signal-row {
   display: grid; grid-template-columns: auto 1fr auto auto; gap: 16px; align-items: center;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
   padding: 14px 18px; transition: border-color .15s;
 }
 .signal-row:hover { border-color: var(--amber-glow); }
@@ -111,11 +146,11 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .signal-detail { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
 .signal-tag {
   font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+  padding: 3px 8px; border-radius: 4px; white-space: nowrap;
 }
 .signal-tag.insider { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
-.signal-tag.institution { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(79,209,197,0.35); }
-.signal-tag.congress { background: rgba(180,150,255,0.12); color: #b496ff; border: 1px solid rgba(180,150,255,0.35); }
+.signal-tag.institution { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(52,211,153,0.35); }
+.signal-tag.congress { background: var(--violet-dim); color: var(--violet); border: 1px solid rgba(167,139,250,0.35); }
 .signal-meta { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
 /* ── TABLE ────────────────────────────────────────────────── */
@@ -126,15 +161,15 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   border-bottom: 1px solid var(--border); font-weight: 600;
 }
 .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-.data-table tr:hover td { background: rgba(255,255,255,0.015); }
+.data-table tr:hover td { background: rgba(201,169,97,0.04); }
 .num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
 
 /* ── STATUS / EMPTY STATES ────────────────────────────────── */
 .status-box {
-  padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 12px;
+  padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 6px;
   color: var(--text-muted); font-size: 13px; line-height: 1.7;
 }
-.status-box.error { border-color: rgba(224,138,138,0.3); color: var(--rose); }
+.status-box.error { border-color: rgba(240,70,92,0.3); color: var(--rose); }
 .status-box code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; }
 .spinner {
   width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber);
@@ -144,7 +179,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 
 /* ── WATCHLIST CARDS (institutions) ───────────────────────── */
 .fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px; }
 .fund-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
 .fund-meta { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
 .fund-holdings { display: flex; flex-direction: column; gap: 6px; }
@@ -153,6 +188,53 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
 .fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
 .fund-link:hover { text-decoration: underline; }
+
+/* ── PRICE CHARTS ─────────────────────────────────────────── */
+.chart-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.chart-search { display: flex; gap: 8px; }
+.chart-search input {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  font-family: 'IBM Plex Mono', monospace; padding: 9px 14px; border-radius: 4px;
+  font-size: 13px; width: 150px; text-transform: uppercase; letter-spacing: 1px;
+}
+.chart-search input:focus { outline: none; border-color: var(--amber-glow); }
+.chart-search input::placeholder { text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+.chart-search button, .range-btn {
+  padding: 9px 16px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; transition: all .15s;
+}
+.chart-search button:hover, .range-btn:hover { border-color: var(--amber-glow); color: var(--text); }
+.range-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.chart-range-btns { display: flex; gap: 6px; }
+
+.chart-frame { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
+.chart-header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 12px; }
+.chart-symbol-title { font-family: 'Fraunces', serif; font-size: 23px; font-weight: 700; letter-spacing: 0.1px; }
+.chart-price-row { font-family: 'IBM Plex Mono', monospace; font-size: 13px; margin-top: 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.chart-price-row .price-now { font-size: 20px; font-weight: 600; }
+.price-change.up { color: var(--teal); }
+.price-change.down { color: var(--rose); }
+.chart-hover-readout { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); text-align: right; line-height: 1.7; min-width: 190px; white-space: nowrap; }
+.price-canvas { width: 100%; height: 320px; display: block; cursor: crosshair; }
+.volume-canvas { width: 100%; height: 64px; display: block; margin-top: 2px; }
+.chart-axis-labels { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-muted); margin-top: 6px; padding: 0 4px; }
+.chart-note { font-size: 11px; color: var(--text-muted); margin-top: 14px; line-height: 1.6; }
+.chart-jump-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px;
+  padding: 4px 9px; cursor: pointer; font-size: 12px; line-height: 1; transition: all .15s; flex-shrink: 0;
+}
+.chart-jump-btn:hover { border-color: var(--amber-glow); color: var(--amber); }
+
+/* ── WATCHLIST ────────────────────────────────────────────── */
+.watch-list { display: flex; flex-direction: column; gap: 8px; }
+.watch-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 18px;
+}
+.watch-row .ticker { font-size: 14px; }
+.watch-price { font-size: 13px; color: var(--text-dim); }
+.inline-msg { font-size: 11px; color: var(--rose); font-family: 'IBM Plex Mono', monospace; margin-top: 8px; display: none; }
 
 footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
 footer a { color: var(--amber); }
@@ -164,11 +246,22 @@ footer a { color: var(--amber); }
 </head>
 <body>
 
+<div class="ticker-tape" id="ticker-tape">
+  <div class="ticker-tape-track" id="ticker-tape-track">
+    <span class="ticker-tape-msg">Add tickers to your Watchlist to see live prices scroll here →</span>
+  </div>
+</div>
+
 <header>
   <div class="brand">
-    <div class="brand-mark">◎</div>
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2 L21 12 L12 22 L3 12 Z"/>
+        <path d="M6 12 L9.5 12 L11 8 L13 16 L14.5 12 L18 12"/>
+      </svg>
+    </div>
     <div>
-      <div class="brand-text">SIGNAL DESK</div>
+      <div class="brand-text">Signal Desk</div>
       <div class="brand-sub">PUBLIC DISCLOSURE TRACKER</div>
     </div>
   </div>
@@ -185,10 +278,13 @@ footer a { color: var(--amber); }
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">⚡ Top Signals</button>
+    <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">Top Signals</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
     <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
     <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
+    <button class="tab-btn" data-tab="charts" onclick="switchTab('charts')">Price Charts</button>
+    <button class="tab-btn" data-tab="screener" onclick="switchTab('screener')">Screener</button>
+    <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">Watchlist</button>
   </div>
 
   <!-- TOP SIGNALS -->
@@ -218,6 +314,72 @@ footer a { color: var(--amber); }
       <div class="status-box"><div class="spinner"></div>Fetching congressional trade disclosures…</div>
     </div>
   </div>
+
+  <!-- PRICE CHARTS -->
+  <div class="tab-panel" id="tab-charts">
+    <div class="chart-controls">
+      <div class="chart-search">
+        <input type="text" id="chart-symbol-input" class="mono" placeholder="Symbol (e.g. AAPL)"
+               onkeydown="if (event.key === 'Enter') loadChart()">
+        <button onclick="loadChart()">Load</button>
+      </div>
+      <div class="chart-range-btns">
+        <button class="range-btn" data-range="1M" onclick="setChartRange('1M')">1M</button>
+        <button class="range-btn active" data-range="3M" onclick="setChartRange('3M')">3M</button>
+        <button class="range-btn" data-range="6M" onclick="setChartRange('6M')">6M</button>
+        <button class="range-btn" data-range="1Y" onclick="setChartRange('1Y')">1Y</button>
+        <button class="range-btn" data-range="2Y" onclick="setChartRange('2Y')">2Y</button>
+      </div>
+    </div>
+
+    <div id="chart-status-area">
+      <div class="status-box">Enter a ticker above, or click any ticker elsewhere in Signal Desk to jump here.</div>
+    </div>
+
+    <div class="chart-frame" id="chart-frame" style="display:none">
+      <div class="chart-header-row">
+        <div>
+          <div class="chart-symbol-title" id="chart-symbol-title"></div>
+          <div class="chart-price-row" id="chart-price-row"></div>
+        </div>
+        <div class="chart-hover-readout" id="chart-hover-readout">Hover chart for daily OHLCV</div>
+      </div>
+      <canvas id="price-canvas" class="price-canvas"></canvas>
+      <canvas id="volume-canvas" class="volume-canvas"></canvas>
+      <div class="chart-axis-labels" id="chart-date-labels"></div>
+      <div class="chart-note">Daily bars via Alpaca's IEX feed (single-exchange, not the consolidated tape) — close enough to judge context around a disclosure, not for execution timing. Not investment advice.</div>
+    </div>
+  </div>
+
+  <!-- SCREENER -->
+  <div class="tab-panel" id="tab-screener">
+    <div class="chart-controls">
+      <div class="chart-range-btns">
+        <button class="range-btn active" data-screener="gainers" onclick="setScreenerView('gainers')">Top Gainers</button>
+        <button class="range-btn" data-screener="losers" onclick="setScreenerView('losers')">Top Losers</button>
+        <button class="range-btn" data-screener="actives" onclick="setScreenerView('actives')">Most Active</button>
+      </div>
+      <button onclick="loadScreener()">Refresh</button>
+    </div>
+    <div id="screener-body">
+      <div class="status-box">Open this tab to load today's movers.</div>
+    </div>
+    <div class="chart-note">"Trend" here means today's biggest price movers and highest-volume names, market-wide — a starting point to dig into, not a signal by itself. Resets at market open; shows the prior session's data until then.</div>
+  </div>
+
+  <!-- WATCHLIST -->
+  <div class="tab-panel" id="tab-watchlist">
+    <div class="chart-controls">
+      <div class="chart-search">
+        <input type="text" id="watchlist-add-input" class="mono" placeholder="Symbol (e.g. AAPL)"
+               onkeydown="if (event.key === 'Enter') addToWatchlist(document.getElementById('watchlist-add-input').value)">
+        <button onclick="addToWatchlist(document.getElementById('watchlist-add-input').value)">Add</button>
+      </div>
+    </div>
+    <div class="inline-msg" id="watchlist-msg"></div>
+    <div id="watchlist-body" class="watch-list" style="margin-top:14px"></div>
+    <div class="chart-note">Saved locally in this browser (not synced across devices) — add tickers here, or click "+ watch" from any chart or screener row.</div>
+  </div>
 </main>
 
 <footer>
@@ -231,6 +393,11 @@ footer a { color: var(--amber); }
 const SEC_INSIDER_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
 const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
 const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+
+// Paste the workers.dev URL printed by `wrangler deploy` here (no trailing
+// slash) once you've deployed alpaca-proxy-worker.js. Leave blank and the
+// Price Charts tab will explain what's missing instead of failing silently.
+const ALPACA_PROXY_URL = '';
 
 // Curated watchlist of well-known institutional investors and their SEC CIK numbers.
 // Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
@@ -251,6 +418,8 @@ let allSignals = [];
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'watchlist') { renderWatchlist(); renderTickerTape(); }
+  if (name === 'screener') loadScreener();
 }
 
 function setFreshness(id, label, status, detail) {
@@ -274,6 +443,13 @@ function fmtMoney(n) {
   if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
   return '$' + n.toFixed(0);
+}
+
+function fmtVol(n) {
+  if (isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return String(n);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -392,7 +568,7 @@ async function loadInstitutions() {
     }
   }
 
-  setFreshness('institution', 'Hedge Funds', anySuccess ? 'stale' : 'stale', 'quarterly, up to 45-day lag');
+  setFreshness('institution', 'Hedge Funds', anySuccess ? 'live' : 'stale', 'quarterly, up to 45-day lag');
   renderSignals();
 }
 
@@ -411,7 +587,7 @@ async function loadCongressTrades() {
       .sort((a, b) => new Date(b.disclosure_date || b.transaction_date) - new Date(a.disclosure_date || a.transaction_date))
       .slice(0, 40);
 
-    setFreshness('congress', 'Congress', 'stale', 'up to 45-day lag');
+    setFreshness('congress', 'Congress', 'live', 'up to 45-day disclosure lag');
 
     const body = document.getElementById('congress-body');
     body.innerHTML = `
@@ -421,7 +597,7 @@ async function loadCongressTrades() {
           ${rows.map(r => `
             <tr>
               <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
-              <td class="ticker">${escHtml(r.ticker || '—')}</td>
+              <td>${r.ticker ? `<span class="ticker" style="cursor:pointer" title="View price chart" onclick="switchTab('charts'); loadChart('${escHtml(r.ticker)}')">${escHtml(r.ticker)}</span>` : '<span class="ticker">—</span>'}</td>
               <td>${escHtml(r.type || '—')}</td>
               <td class="num">${escHtml(r.amount || '—')}</td>
               <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
@@ -437,7 +613,8 @@ async function loadCongressTrades() {
       allSignals.push({
         source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
         detail: `${r.type || 'Trade'} disclosed ${r.disclosure_date || ''}`, direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
-        time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0
+        time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0,
+        ticker: r.ticker || null
       });
     });
     renderSignals();
@@ -461,16 +638,459 @@ function renderSignals() {
   if (!allSignals.length) return;
   const sorted = [...allSignals].sort((a, b) => b.sortValue - a.sortValue).slice(0, 20);
   body.innerHTML = sorted.map(s => `
-    <div class="signal-row">
+    <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
       <div class="ping-wrap"><div class="ping ${s.direction}" style="width:${s.direction === 'neutral' ? 10 : 14}px;height:${s.direction === 'neutral' ? 10 : 14}px"></div></div>
       <div class="signal-main">
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
       </div>
       <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
+      ${s.ticker ? `<button class="chart-jump-btn" title="View price chart for ${escHtml(s.ticker)}" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>` : '<span></span>'}
       <div class="signal-meta">${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
     </div>
   `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// SOURCE 4 — PRICE CHARTS (Alpaca, via Cloudflare Worker proxy)
+// ══════════════════════════════════════════════════════════════
+const RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 182, '1Y': 365, '2Y': 730 };
+
+let chartCurrentSymbol = null;
+let chartCurrentRange = '3M';
+let chartBars = [];
+let chartHoverIndex = null;
+
+function ymd(d) { return d.toISOString().slice(0, 10); }
+
+function setChartRange(range) {
+  chartCurrentRange = range;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === range));
+  if (chartCurrentSymbol) loadChart(chartCurrentSymbol);
+}
+
+function loadChart(presetSymbol) {
+  const input = document.getElementById('chart-symbol-input');
+  const symbol = (presetSymbol || input.value || '').toUpperCase().trim();
+  if (!symbol) return;
+  input.value = symbol;
+  chartCurrentSymbol = symbol;
+
+  const statusArea = document.getElementById('chart-status-area');
+  const frame = document.getElementById('chart-frame');
+
+  if (!ALPACA_PROXY_URL) {
+    frame.style.display = 'none';
+    statusArea.innerHTML = `
+      <div class="status-box error">
+        Price charts need your Alpaca proxy Worker connected.<br>
+        Deploy <code>alpaca-proxy-worker.js</code> with Wrangler (see the deploy steps in that file), then set <code>ALPACA_PROXY_URL</code>
+        near the top of this file's script to your Worker's <code>workers.dev</code> URL and reload this page.
+      </div>`;
+    return;
+  }
+
+  statusArea.innerHTML = `<div class="status-box"><div class="spinner"></div>Loading ${escHtml(symbol)}…</div>`;
+  frame.style.display = 'none';
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - RANGE_DAYS[chartCurrentRange]);
+
+  fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(symbol)}&start=${ymd(start)}&end=${ymd(end)}`)
+    .then(res => res.json().then(body => ({ ok: res.ok, body })))
+    .then(({ ok, body }) => {
+      if (!ok) throw new Error(body.error || 'Request failed');
+      if (!body.bars || !body.bars.length) throw new Error('No bars returned for this symbol/range');
+      chartBars = body.bars;
+      chartHoverIndex = null;
+      statusArea.innerHTML = '';
+      frame.style.display = 'block';
+      renderChartHeader(symbol, chartBars);
+      redrawChart();
+    })
+    .catch(err => {
+      frame.style.display = 'none';
+      statusArea.innerHTML = `
+        <div class="status-box error">
+          Couldn't load ${escHtml(symbol)}: ${escHtml(err.message)}<br>
+          Double-check the ticker, and confirm the Worker is deployed with valid Alpaca keys set via <code>wrangler secret put</code>.
+        </div>`;
+    });
+}
+
+function renderChartHeader(symbol, bars) {
+  document.getElementById('chart-symbol-title').innerHTML = `${escHtml(symbol)} <button class="chart-jump-btn" style="margin-left:8px;vertical-align:middle" onclick="addToWatchlist('${escHtml(symbol)}')">+ watch</button>`;
+  const first = bars[0], last = bars[bars.length - 1];
+  const change = last.c - first.c;
+  const pct = first.c ? (change / first.c) * 100 : 0;
+  const dir = change >= 0 ? 'up' : 'down';
+  document.getElementById('chart-price-row').innerHTML = `
+    <span class="price-now">$${last.c.toFixed(2)}</span>
+    <span class="price-change ${dir}">${change >= 0 ? '+' : ''}${change.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%) over ${escHtml(chartCurrentRange)}</span>
+  `;
+  updateHoverReadout(null);
+}
+
+function updateHoverReadout(idx) {
+  const el = document.getElementById('chart-hover-readout');
+  if (idx === null || !chartBars[idx]) {
+    el.innerHTML = 'Hover chart for daily OHLCV';
+    return;
+  }
+  const b = chartBars[idx];
+  el.innerHTML = `
+    ${new Date(b.t).toLocaleDateString()}<br>
+    O ${b.o.toFixed(2)} · H ${b.h.toFixed(2)}<br>
+    L ${b.l.toFixed(2)} · C ${b.c.toFixed(2)}<br>
+    Vol ${fmtVol(b.v)}
+  `;
+}
+
+function redrawChart() {
+  if (!chartBars.length) return;
+  drawCandles();
+  drawVolume();
+  drawDateLabels();
+}
+
+function drawCandles() {
+  const canvas = document.getElementById('price-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const bars = chartBars;
+  const padL = 8, padR = 56, padT = 12, padB = 8;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  let hi = -Infinity, lo = Infinity;
+  bars.forEach(b => { hi = Math.max(hi, b.h); lo = Math.min(lo, b.l); });
+  const range = (hi - lo) || 1;
+  const pad = range * 0.06;
+  hi += pad; lo -= pad;
+
+  const yFor = v => padT + plotH * (1 - (v - lo) / (hi - lo));
+  const slot = plotW / bars.length;
+  const bodyW = Math.max(2, Math.min(10, slot * 0.6));
+
+  ctx.strokeStyle = 'rgba(255,180,84,0.08)';
+  ctx.fillStyle = 'rgba(245,240,230,0.32)';
+  ctx.font = '10px IBM Plex Mono, monospace';
+  ctx.textAlign = 'left';
+  const gridLines = 5;
+  for (let i = 0; i <= gridLines; i++) {
+    const v = lo + (hi - lo) * (i / gridLines);
+    const y = yFor(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText('$' + v.toFixed(2), W - padR + 6, y + 3);
+  }
+
+  bars.forEach((b, i) => {
+    const x = padL + slot * i + slot / 2;
+    const up = b.c >= b.o;
+    const color = up ? '#4fd1c5' : '#e08a8a';
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, yFor(b.h));
+    ctx.lineTo(x, yFor(b.l));
+    ctx.stroke();
+    const yO = yFor(b.o), yC = yFor(b.c);
+    const top = Math.min(yO, yC), h = Math.max(1, Math.abs(yO - yC));
+    ctx.fillRect(x - bodyW / 2, top, bodyW, h);
+  });
+
+  if (chartHoverIndex !== null && bars[chartHoverIndex]) {
+    const x = padL + slot * chartHoverIndex + slot / 2;
+    ctx.strokeStyle = 'rgba(255,180,84,0.45)';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  canvas.onmousemove = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    let idx = Math.floor((mx - padL) / slot);
+    idx = Math.max(0, Math.min(bars.length - 1, idx));
+    if (idx !== chartHoverIndex) {
+      chartHoverIndex = idx;
+      updateHoverReadout(idx);
+      redrawChart();
+    }
+  };
+  canvas.onmouseleave = () => {
+    chartHoverIndex = null;
+    updateHoverReadout(null);
+    redrawChart();
+  };
+}
+
+function drawVolume() {
+  const canvas = document.getElementById('volume-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const bars = chartBars;
+  const padL = 8, padR = 56;
+  const plotW = W - padL - padR;
+  let maxV = 0;
+  bars.forEach(b => maxV = Math.max(maxV, b.v));
+  const slot = plotW / bars.length;
+  const bodyW = Math.max(2, Math.min(10, slot * 0.6));
+
+  bars.forEach((b, i) => {
+    const x = padL + slot * i + slot / 2;
+    const up = b.c >= b.o;
+    ctx.fillStyle = up ? 'rgba(79,209,197,0.5)' : 'rgba(224,138,138,0.5)';
+    const h = maxV ? (b.v / maxV) * (H - 4) : 0;
+    ctx.fillRect(x - bodyW / 2, H - h, bodyW, h);
+  });
+}
+
+function drawDateLabels() {
+  const bars = chartBars;
+  const container = document.getElementById('chart-date-labels');
+  const n = Math.min(5, bars.length);
+  const idxs = [];
+  for (let i = 0; i < n; i++) idxs.push(Math.round((bars.length - 1) * (n === 1 ? 0 : i / (n - 1))));
+  container.innerHTML = idxs.map(i => `<span>${new Date(bars[i].t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`).join('');
+}
+
+let chartResizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => { if (chartBars.length) redrawChart(); }, 150);
+});
+
+// ══════════════════════════════════════════════════════════════
+// WATCHLIST — saved locally in this browser (localStorage)
+// ══════════════════════════════════════════════════════════════
+const WATCHLIST_KEY = 'signalDeskWatchlist';
+const TICKER_CLIENT_RE = /^[A-Z.]{1,10}$/;
+
+function getWatchlist() {
+  try { return JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveWatchlist(list) {
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list));
+}
+
+function showWatchlistMsg(msg) {
+  const el = document.getElementById('watchlist-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(showWatchlistMsg._t);
+  showWatchlistMsg._t = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+function addToWatchlist(rawSymbol) {
+  const symbol = (rawSymbol || '').toUpperCase().trim();
+  if (!TICKER_CLIENT_RE.test(symbol)) {
+    showWatchlistMsg('Enter a valid ticker — letters and periods only (e.g. AAPL, BRK.B)');
+    return;
+  }
+  const list = getWatchlist();
+  if (!list.includes(symbol)) {
+    list.push(symbol);
+    saveWatchlist(list);
+  }
+  const input = document.getElementById('watchlist-add-input');
+  if (input) input.value = '';
+  renderWatchlist();
+  renderTickerTape();
+}
+
+function removeFromWatchlist(symbol) {
+  saveWatchlist(getWatchlist().filter(s => s !== symbol));
+  renderWatchlist();
+  renderTickerTape();
+}
+
+// ── Ticker tape — scrolls the saved watchlist with live price/change,
+// duplicated once so the loop is seamless (CSS animates a -50% shift).
+function renderTickerTape() {
+  const track = document.getElementById('ticker-tape-track');
+  const list = getWatchlist();
+
+  if (!ALPACA_PROXY_URL) {
+    track.innerHTML = '<span class="ticker-tape-msg">Connect your Alpaca proxy Worker to light up this tape with live prices.</span>';
+    return;
+  }
+  if (!list.length) {
+    track.innerHTML = '<span class="ticker-tape-msg">Add tickers to your Watchlist to see live prices scroll here →</span>';
+    return;
+  }
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 10);
+
+  Promise.all(list.map(sym =>
+    fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(sym)}&start=${ymd(start)}&end=${ymd(end)}`)
+      .then(res => res.json().then(b => ({ ok: res.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || !b.bars || !b.bars.length) return null;
+        const bars = b.bars;
+        const last = bars[bars.length - 1];
+        const prev = bars.length > 1 ? bars[bars.length - 2] : last;
+        const change = last.c - prev.c;
+        const pct = prev.c ? (change / prev.c) * 100 : 0;
+        return { sym, price: last.c, pct };
+      })
+      .catch(() => null)
+  )).then(results => {
+    const items = results.filter(Boolean);
+    if (!items.length) {
+      track.innerHTML = '<span class="ticker-tape-msg">Couldn\'t load live prices for the tape right now.</span>';
+      return;
+    }
+    const itemsHtml = items.map(it => `
+      <span class="ticker-tape-item">
+        <span class="tt-sym">${escHtml(it.sym)}</span>
+        <span>$${it.price.toFixed(2)}</span>
+        <span class="tt-chg ${it.pct >= 0 ? 'up' : 'down'}">${it.pct >= 0 ? '▲' : '▼'} ${Math.abs(it.pct).toFixed(2)}%</span>
+      </span>
+    `).join('');
+    track.innerHTML = itemsHtml + itemsHtml; // duplicated for a seamless loop
+  });
+}
+
+async function renderWatchlist() {
+  const list = getWatchlist();
+  const body = document.getElementById('watchlist-body');
+
+  if (!list.length) {
+    body.innerHTML = '<div class="status-box">Your watchlist is empty. Add a ticker above, or click "+ watch" from any chart or screener row.</div>';
+    return;
+  }
+
+  body.innerHTML = list.map(sym => `
+    <div class="watch-row">
+      <span class="ticker" style="cursor:pointer" title="View price chart" onclick="switchTab('charts'); loadChart('${sym}')">${sym}</span>
+      <span class="watch-price mono" id="watch-price-${sym}">${ALPACA_PROXY_URL ? 'loading…' : '—'}</span>
+      <button class="chart-jump-btn" onclick="removeFromWatchlist('${sym}')" title="Remove from watchlist">remove</button>
+    </div>
+  `).join('');
+
+  if (!ALPACA_PROXY_URL) return; // ticker list still shows; just no live price without the Worker configured
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 10); // enough calendar days to cover the last 2 trading sessions
+
+  for (const sym of list) {
+    fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(sym)}&start=${ymd(start)}&end=${ymd(end)}`)
+      .then(res => res.json().then(b => ({ ok: res.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || !b.bars || !b.bars.length) throw new Error('no data');
+        const bars = b.bars;
+        const last = bars[bars.length - 1];
+        const prev = bars.length > 1 ? bars[bars.length - 2] : last;
+        const change = last.c - prev.c;
+        const pct = prev.c ? (change / prev.c) * 100 : 0;
+        const dir = change >= 0 ? 'up' : 'down';
+        const el = document.getElementById('watch-price-' + sym);
+        if (el) el.innerHTML = `$${last.c.toFixed(2)} <span class="price-change ${dir}">${change >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+      })
+      .catch(() => {
+        const el = document.getElementById('watch-price-' + sym);
+        if (el) el.textContent = '—';
+      });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SCREENER — today's top gainers / losers / most active (Alpaca)
+// ══════════════════════════════════════════════════════════════
+let screenerView = 'gainers';
+
+function setScreenerView(view) {
+  screenerView = view;
+  document.querySelectorAll('[data-screener]').forEach(b => b.classList.toggle('active', b.dataset.screener === view));
+  loadScreener();
+}
+
+function loadScreener() {
+  const body = document.getElementById('screener-body');
+
+  if (!ALPACA_PROXY_URL) {
+    body.innerHTML = `
+      <div class="status-box error">
+        The screener needs your Alpaca proxy Worker connected.<br>
+        Deploy the updated <code>alpaca-proxy-worker.js</code> (adds <code>/movers</code> and <code>/actives</code> routes) with Wrangler,
+        then set <code>ALPACA_PROXY_URL</code> near the top of this file's script.
+      </div>`;
+    return;
+  }
+
+  const label = screenerView === 'actives' ? 'most active names' : screenerView;
+  body.innerHTML = `<div class="status-box"><div class="spinner"></div>Loading today's ${escHtml(label)}…</div>`;
+
+  const endpoint = screenerView === 'actives' ? '/actives?by=volume&top=20' : '/movers?top=20';
+
+  fetch(`${ALPACA_PROXY_URL}${endpoint}`)
+    .then(res => res.json().then(b => ({ ok: res.ok, b })))
+    .then(({ ok, b }) => {
+      if (!ok) throw new Error(b.error || 'Request failed');
+
+      if (screenerView === 'actives') {
+        const rows = b.most_actives || b.mostActives || [];
+        if (!rows.length) throw new Error('No data returned — this can happen outside market hours on a fresh trading day');
+        body.innerHTML = `
+          <table class="data-table">
+            <thead><tr><th>Symbol</th><th>Volume</th><th>Trades</th><th></th></tr></thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td><span class="ticker" style="cursor:pointer" onclick="switchTab('charts'); loadChart('${escHtml(r.symbol)}')">${escHtml(r.symbol)}</span></td>
+                  <td class="num">${fmtVol(r.volume)}</td>
+                  <td class="num">${r.trade_count != null ? fmtVol(r.trade_count) : '—'}</td>
+                  <td><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(r.symbol)}')">+ watch</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`;
+      } else {
+        const rows = screenerView === 'gainers' ? (b.gainers || []) : (b.losers || []);
+        if (!rows.length) throw new Error('No data returned — this can happen outside market hours on a fresh trading day');
+        body.innerHTML = `
+          <table class="data-table">
+            <thead><tr><th>Symbol</th><th>Price</th><th>Change</th><th></th></tr></thead>
+            <tbody>
+              ${rows.map(r => {
+                const pct = r.percent_change != null ? r.percent_change : (r.change_percent || 0);
+                const dir = pct >= 0 ? 'up' : 'down';
+                const price = r.price != null ? r.price : 0;
+                return `
+                <tr>
+                  <td><span class="ticker" style="cursor:pointer" onclick="switchTab('charts'); loadChart('${escHtml(r.symbol)}')">${escHtml(r.symbol)}</span></td>
+                  <td class="num">$${price.toFixed(2)}</td>
+                  <td class="num price-change ${dir}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</td>
+                  <td><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(r.symbol)}')">+ watch</button></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`;
+      }
+    })
+    .catch(err => {
+      body.innerHTML = `<div class="status-box error">Couldn't load screener data: ${escHtml(err.message)}</div>`;
+    });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -479,6 +1099,7 @@ function renderSignals() {
 loadInsiderTrades();
 loadInstitutions();
 loadCongressTrades();
+renderTickerTape();
 </script>
 </body>
 </html>
