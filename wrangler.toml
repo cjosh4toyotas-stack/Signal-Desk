@@ -7,3 +7,16 @@ compatibility_date = "2026-07-27"
 #   wrangler secret put APCA_API_KEY_ID
 #   wrangler secret put APCA_API_SECRET_KEY
 # They're encrypted and never appear in this file or in source control.
+
+# AlpacaStreamRelay (Durable Object) backs the /stream WebSocket route.
+# It holds the one WebSocket connection to Alpaca that most plans allow
+# per account, and fans it out to every connected browser tab. Runs on
+# Cloudflare's free plan — SQLite-backed Durable Objects don't require
+# Workers Paid.
+[[durable_objects.bindings]]
+name = "ALPACA_STREAM"
+class_name = "AlpacaStreamRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AlpacaStreamRelay"]
