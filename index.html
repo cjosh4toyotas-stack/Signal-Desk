@@ -19,6 +19,9 @@
   --amber: #c9a961;
   --amber-dim: rgba(201,169,97,0.14);
   --amber-glow: rgba(201,169,97,0.42);
+  --blue: #2f7dff;
+  --blue-dim: rgba(47,125,255,0.14);
+  --blue-glow: rgba(47,125,255,0.45);
   --teal: #34d399;
   --teal-dim: rgba(52,211,153,0.12);
   --rose: #f0465c;
@@ -107,7 +110,10 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
 .hero-title { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 700; line-height: 1.08; letter-spacing: -0.3px; }
-.hero-title span { color: var(--amber); }
+.hero-title span {
+  background: linear-gradient(100deg, var(--amber) 20%, var(--blue) 85%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
 .hero-sub { font-size: 13px; color: var(--text-dim); margin-top: 10px; max-width: 520px; line-height: 1.5; }
 .hero-note {
   font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;
@@ -122,7 +128,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
   cursor: pointer; transition: all .15s;
 }
-.tab-btn:hover { border-color: var(--amber-glow); color: var(--text); }
+.tab-btn:hover { border-color: var(--blue-glow); color: var(--text); }
 .tab-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; animation: fadeIn .3s ease; }
@@ -135,7 +141,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
   padding: 14px 18px; transition: border-color .15s;
 }
-.signal-row:hover { border-color: var(--amber-glow); }
+.signal-row:hover { border-color: var(--blue-glow); }
 .ping-wrap { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .ping { border-radius: 50%; position: relative; }
 .ping.buy { background: var(--teal); box-shadow: 0 0 10px var(--teal); }
@@ -161,7 +167,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   border-bottom: 1px solid var(--border); font-weight: 600;
 }
 .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-.data-table tr:hover td { background: rgba(201,169,97,0.04); }
+.data-table tr:hover td { background: rgba(47,125,255,0.05); }
 .num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
 
 /* ── STATUS / EMPTY STATES ────────────────────────────────── */
@@ -172,7 +178,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .status-box.error { border-color: rgba(240,70,92,0.3); color: var(--rose); }
 .status-box code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; }
 .spinner {
-  width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber);
+  width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--blue);
   border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -197,13 +203,13 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   font-family: 'IBM Plex Mono', monospace; padding: 9px 14px; border-radius: 4px;
   font-size: 13px; width: 150px; text-transform: uppercase; letter-spacing: 1px;
 }
-.chart-search input:focus { outline: none; border-color: var(--amber-glow); }
+.chart-search input:focus { outline: none; border-color: var(--blue-glow); }
 .chart-search input::placeholder { text-transform: none; letter-spacing: 0; color: var(--text-muted); }
 .chart-search button, .range-btn {
   padding: 9px 16px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface);
   color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; transition: all .15s;
 }
-.chart-search button:hover, .range-btn:hover { border-color: var(--amber-glow); color: var(--text); }
+.chart-search button:hover, .range-btn:hover { border-color: var(--blue-glow); color: var(--text); }
 .range-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
 .chart-range-btns { display: flex; gap: 6px; }
 
@@ -223,7 +229,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px;
   padding: 4px 9px; cursor: pointer; font-size: 12px; line-height: 1; transition: all .15s; flex-shrink: 0;
 }
-.chart-jump-btn:hover { border-color: var(--amber-glow); color: var(--amber); }
+.chart-jump-btn:hover { border-color: var(--blue-glow); color: var(--blue); }
 
 /* ── WATCHLIST ────────────────────────────────────────────── */
 .watch-list { display: flex; flex-direction: column; gap: 8px; }
@@ -271,7 +277,7 @@ footer a { color: var(--amber); }
 <main>
   <div class="hero">
     <div>
-      <div class="hero-title">Follow the <span>money</span>, legally.</div>
+      <div class="hero-title">Public disclosures. Private-grade <span>signal</span>.</div>
       <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
     </div>
     <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
@@ -457,7 +463,8 @@ function fmtVol(n) {
 // ══════════════════════════════════════════════════════════════
 async function loadInsiderTrades() {
   try {
-    const res = await fetch(SEC_INSIDER_FEED, { headers: { 'Accept': 'application/atom+xml' } });
+    const feedUrl = ALPACA_PROXY_URL ? `${ALPACA_PROXY_URL}/insider-feed` : SEC_INSIDER_FEED;
+    const res = await fetch(feedUrl, { headers: { 'Accept': 'application/atom+xml' } });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     const xml = new DOMParser().parseFromString(text, 'application/xml');
@@ -507,7 +514,10 @@ async function loadInsiderTrades() {
     document.getElementById('insiders-body').innerHTML = `
       <div class="status-box error">
         Couldn't reach the live SEC filing feed from this page (${escHtml(err.message)}).<br>
-        This can happen if SEC's server blocks direct browser requests from this domain.<br><br>
+        ${ALPACA_PROXY_URL
+          ? `The Worker at <code>ALPACA_PROXY_URL</code> didn't return a usable feed — check it's redeployed with the <code>/insider-feed</code> route and try again.`
+          : `Browsers block this SEC endpoint's response for cross-origin requests. Set <code>ALPACA_PROXY_URL</code> near the top of this file's script to your deployed Worker — it proxies this feed server-side, which sidesteps the issue entirely.`}
+        <br><br>
         You can always check the source directly: <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4" target="_blank" rel="noopener">sec.gov Form 4 filings →</a>
       </div>`;
   }
@@ -577,7 +587,8 @@ async function loadInstitutions() {
 // ══════════════════════════════════════════════════════════════
 async function loadCongressTrades() {
   try {
-    const res = await fetch(CONGRESS_HOUSE_URL);
+    const feedUrl = ALPACA_PROXY_URL ? `${ALPACA_PROXY_URL}/congress-feed` : CONGRESS_HOUSE_URL;
+    const res = await fetch(feedUrl);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Empty dataset returned');
@@ -623,8 +634,10 @@ async function loadCongressTrades() {
     document.getElementById('congress-body').innerHTML = `
       <div class="status-box error">
         Couldn't reach the congressional trade dataset (${escHtml(err.message)}).<br>
-        This tracker relies on the open-source <code>house-stock-watcher</code> project's public data file — if that project's hosting has moved,
-        update <code>CONGRESS_HOUSE_URL</code> near the top of this file's script with a current source.<br><br>
+        ${ALPACA_PROXY_URL
+          ? `The Worker at <code>ALPACA_PROXY_URL</code> didn't return usable data — check it's redeployed with the <code>/congress-feed</code> route and try again.`
+          : `This can happen if the browser blocks the S3 bucket's response for cross-origin requests. Set <code>ALPACA_PROXY_URL</code> near the top of this file's script to your deployed Worker — it proxies this dataset server-side, which sidesteps the issue entirely.`}
+        If the underlying <code>house-stock-watcher</code> project's hosting has moved, update <code>CONGRESS_HOUSE_URL</code> near the top of this file's script with a current source.<br><br>
         You can check disclosures directly at <a class="fund-link" href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov →</a>
       </div>`;
   }
@@ -779,7 +792,7 @@ function drawCandles() {
   const slot = plotW / bars.length;
   const bodyW = Math.max(2, Math.min(10, slot * 0.6));
 
-  ctx.strokeStyle = 'rgba(255,180,84,0.08)';
+  ctx.strokeStyle = 'rgba(201,169,97,0.08)';
   ctx.fillStyle = 'rgba(245,240,230,0.32)';
   ctx.font = '10px IBM Plex Mono, monospace';
   ctx.textAlign = 'left';
@@ -808,7 +821,7 @@ function drawCandles() {
 
   if (chartHoverIndex !== null && bars[chartHoverIndex]) {
     const x = padL + slot * chartHoverIndex + slot / 2;
-    ctx.strokeStyle = 'rgba(255,180,84,0.45)';
+    ctx.strokeStyle = 'rgba(47,125,255,0.55)';
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
     ctx.setLineDash([]);
