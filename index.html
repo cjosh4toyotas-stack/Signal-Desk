@@ -3,89 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fund Detail — Signal Desk</title>
+<title>Signal Desk — Public Disclosure Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0d0b08; --surface: #17140f; --surface2: #1f1b14;
-  --border: rgba(255,180,84,0.12); --amber: #ffb454; --amber-dim: rgba(255,180,84,0.14); --amber-glow: rgba(255,180,84,0.35);
-  --teal: #4fd1c5; --teal-dim: rgba(79,209,197,0.12);
+  --bg: #0d0b08;
+  --surface: #17140f;
+  --surface2: #1f1b14;
+  --border: rgba(255,180,84,0.12);
+  --amber: #ffb454;
+  --amber-dim: rgba(255,180,84,0.14);
+  --amber-glow: rgba(255,180,84,0.35);
+  --teal: #4fd1c5;
+  --teal-dim: rgba(79,209,197,0.12);
   --rose: #e08a8a;
-  --green: #4ade80;
-  --text: #f5f0e6; --text-dim: rgba(245,240,230,0.6); --text-muted: rgba(245,240,230,0.32);
+  --rose-dim: rgba(224,138,138,0.12);
+  --text: #f5f0e6;
+  --text-dim: rgba(245,240,230,0.6);
+  --text-muted: rgba(245,240,230,0.32);
 }
+
 html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
 
+/* ── SCANLINE TEXTURE ─────────────────────────────────────── */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 3px);
+}
+
+/* ── HEADER ───────────────────────────────────────────────── */
 header {
-  position: sticky; top: 0; z-index: 10; background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border); padding: 18px 32px;
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+.brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark {
-  width: 34px; height: 34px; border-radius: 6px; background: var(--amber-dim); border: 1px solid var(--amber-glow);
-  display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
+  width: 34px; height: 34px; border-radius: 6px;
+  background: var(--amber-dim); border: 1px solid var(--amber-glow);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
 }
 .brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
 .brand-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
-.back-link { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--teal); text-decoration: none; }
-.back-link:hover { text-decoration: underline; }
 
-main { max-width: 1100px; margin: 0 auto; padding: 32px; }
+.freshness-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.freshness-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--text-dim);
+}
+.freshness-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.freshness-dot.live { background: var(--teal); box-shadow: 0 0 6px var(--teal); animation: pulse-dot 2s infinite; }
+.freshness-dot.stale { background: var(--rose); }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-.fund-header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.fund-title { font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; }
-.fund-sub { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-top: 6px; }
+/* ── LAYOUT ───────────────────────────────────────────────── */
+main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; padding: 32px; }
 
-.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
-.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
-.stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 700; color: var(--amber); }
-.stat-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+.hero {
+  display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.hero-title { font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; }
+.hero-title span { color: var(--amber); }
+.hero-sub { font-size: 13px; color: var(--text-dim); margin-top: 8px; max-width: 520px; line-height: 1.5; }
+.hero-note {
+  font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; max-width: 260px; line-height: 1.6;
+}
 
-.section-title { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; margin: 32px 0 14px; display: flex; align-items: center; gap: 10px; }
-.section-count { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); font-weight: 400; }
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim);
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
+  cursor: pointer; transition: all .15s;
+}
+.tab-btn:hover { border-color: var(--amber-glow); color: var(--text); }
+.tab-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; animation: fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-.change-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-.change-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-.change-card.new { border-left: 3px solid var(--green); }
-.change-card.closed { border-left: 3px solid var(--rose); }
-.change-card.up { border-left: 3px solid var(--teal); }
-.change-card.down { border-left: 3px solid var(--amber); }
-.change-issuer { font-weight: 600; font-size: 13px; }
-.change-detail { font-size: 11px; color: var(--text-dim); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+/* ── SIGNAL CARDS ─────────────────────────────────────────── */
+.signal-list { display: flex; flex-direction: column; gap: 10px; }
+.signal-row {
+  display: grid; grid-template-columns: auto 1fr auto auto; gap: 16px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; transition: border-color .15s;
+}
+.signal-row:hover { border-color: var(--amber-glow); }
+.ping-wrap { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ping { border-radius: 50%; position: relative; }
+.ping.buy { background: var(--teal); box-shadow: 0 0 10px var(--teal); }
+.ping.sell { background: var(--rose); box-shadow: 0 0 10px var(--rose); }
+.ping.neutral { background: var(--text-muted); }
+.signal-main { min-width: 0; }
+.signal-entity { font-weight: 600; font-size: 14px; }
+.signal-detail { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.signal-tag {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+.signal-tag.insider { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
+.signal-tag.institution { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(79,209,197,0.35); }
+.signal-tag.congress { background: rgba(180,150,255,0.12); color: #b496ff; border: 1px solid rgba(180,150,255,0.35); }
+.signal-meta { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+/* ── TABLE ────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th {
   text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--text-dim);
-  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); font-weight: 600;
 }
-.data-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .data-table tr:hover td { background: rgba(255,255,255,0.015); }
 .num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
-.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); }
 
-.status-box { padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 12px; color: var(--text-muted); font-size: 13px; line-height: 1.7; }
+/* ── STATUS / EMPTY STATES ────────────────────────────────── */
+.status-box {
+  padding: 40px 24px; text-align: center; border: 1px dashed var(--border); border-radius: 12px;
+  color: var(--text-muted); font-size: 13px; line-height: 1.7;
+}
 .status-box.error { border-color: rgba(224,138,138,0.3); color: var(--rose); }
 .status-box code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; }
-.spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--amber);
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.spark-cell { display: flex; align-items: center; justify-content: flex-end; min-height: 32px; }
-.price-pulse { color: var(--text-muted); animation: pricePulse 1.4s ease-in-out infinite; }
-@keyframes pricePulse { 0%,100% { opacity: .35; } 50% { opacity: .9; } }
-.price-source-note {
-  font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--text-muted);
-  font-weight: 400; text-transform: none; letter-spacing: 0.3px;
-}
-
-.fund-link { color: var(--teal); font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-decoration: none; }
+/* ── WATCHLIST CARDS (institutions) ───────────────────────── */
+.fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.fund-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+.fund-meta { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
+.fund-holdings { display: flex; flex-direction: column; gap: 6px; }
+.fund-holding-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.fund-holding-row:last-child { border-bottom: none; }
+.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
+.fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
 .fund-link:hover { text-decoration: underline; }
-.empty-note { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 12px 0; }
 
 footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+footer a { color: var(--amber); }
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
@@ -94,384 +165,320 @@ footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-
 <body>
 
 <header>
-  <a class="brand" href="index.html">
+  <div class="brand">
     <div class="brand-mark">◎</div>
     <div>
       <div class="brand-text">SIGNAL DESK</div>
-      <div class="brand-sub">FUND DETAIL</div>
+      <div class="brand-sub">PUBLIC DISCLOSURE TRACKER</div>
     </div>
-  </a>
-  <a class="back-link" href="index.html">← Back to all sources</a>
+  </div>
+  <div class="freshness-row" id="freshness-row"></div>
 </header>
 
 <main>
-  <div class="fund-header">
-    <div class="fund-title" id="fund-title">Loading…</div>
-    <div class="fund-sub" id="fund-sub"></div>
+  <div class="hero">
+    <div>
+      <div class="hero-title">Follow the <span>money</span>, legally.</div>
+      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
+    </div>
+    <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
   </div>
 
-  <div id="page-body">
-    <div class="status-box"><div class="spinner"></div>Fetching filing history from SEC EDGAR…</div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">⚡ Top Signals</button>
+    <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
+    <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
+    <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
+  </div>
+
+  <!-- TOP SIGNALS -->
+  <div class="tab-panel active" id="tab-signals">
+    <div id="signals-body" class="signal-list">
+      <div class="status-box"><div class="spinner"></div>Gathering signals across all three sources…</div>
+    </div>
+  </div>
+
+  <!-- INSIDER TRADES -->
+  <div class="tab-panel" id="tab-insiders">
+    <div id="insiders-body">
+      <div class="status-box"><div class="spinner"></div>Fetching the latest Form 4 filings from SEC EDGAR…</div>
+    </div>
+  </div>
+
+  <!-- INSTITUTIONS / 13F -->
+  <div class="tab-panel" id="tab-institutions">
+    <div id="institutions-body" class="fund-grid">
+      <div class="status-box"><div class="spinner"></div>Loading latest 13F filings for the tracked fund list…</div>
+    </div>
+  </div>
+
+  <!-- CONGRESS -->
+  <div class="tab-panel" id="tab-congress">
+    <div id="congress-body">
+      <div class="status-box"><div class="spinner"></div>Fetching congressional trade disclosures…</div>
+    </div>
   </div>
 </main>
 
 <footer>
-  Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported for filings since Jan 2023 — rounded to the nearest whole dollar. Ticker mapping via OpenFIGI; price history via Alpaca, when configured — both optional and never required for the core holdings data.
+  Data sourced from SEC EDGAR (data.sec.gov) and public congressional disclosure datasets. Congressional and 13F data carry legally mandated reporting delays — see header badges for freshness.
 </footer>
 
 <script>
-const CORS_PROXIES = [
-  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
-  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+// ══════════════════════════════════════════════════════════════
+// CONFIG — data sources. Update these if a source moves.
+// ══════════════════════════════════════════════════════════════
+const SEC_INSIDER_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
+const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
+const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+
+// Curated watchlist of well-known institutional investors and their SEC CIK numbers.
+// Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
+const FUND_WATCHLIST = [
+  { name: 'Berkshire Hathaway', cik: '0001067983' },
+  { name: 'Bridgewater Associates', cik: '0001350694' },
+  { name: 'Renaissance Technologies', cik: '0001037389' },
+  { name: 'Pershing Square Capital (Ackman)', cik: '0001336528' },
+  { name: 'Scion Asset Management (Burry)', cik: '0001649339' },
+  { name: 'Third Point (Loeb)', cik: '0001040273' }
 ];
 
-async function fetchViaProxyChain(targetUrl) {
-  let lastErr = null;
-  for (const buildProxyUrl of CORS_PROXIES) {
-    try {
-      const res = await fetch(buildProxyUrl(targetUrl));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res;
-    } catch (err) { lastErr = err; }
-  }
-  throw lastErr || new Error('All proxies failed');
+let allSignals = [];
+
+// ══════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
 }
 
-async function fetchDirect(url) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res;
-  } catch (e) {
-    return await fetchViaProxyChain(url);
+function setFreshness(id, label, status, detail) {
+  let row = document.getElementById('freshness-row');
+  let pill = document.getElementById('fresh-' + id);
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.className = 'freshness-pill';
+    pill.id = 'fresh-' + id;
+    row.appendChild(pill);
   }
+  pill.innerHTML = `<span class="freshness-dot ${status}"></span>${label}${detail ? ' · ' + detail : ''}`;
 }
 
-function escHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 function fmtMoney(n) {
   if (isNaN(n)) return '—';
-  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
   if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
   return '$' + n.toFixed(0);
 }
-function fmtShares(n) { return Math.round(n).toLocaleString('en-US'); }
 
 // ══════════════════════════════════════════════════════════════
-// PRICE CONTEXT — CUSIP → ticker (OpenFIGI) → price history (Alpaca proxy)
+// SOURCE 1 — INSIDER TRADES (SEC Form 4, live feed)
 // ══════════════════════════════════════════════════════════════
-// Entirely optional and self-healing: if OpenFIGI has no match, or the
-// Alpaca proxy isn't deployed/configured, rows just skip these columns.
-// Nothing here blocks the core holdings table, which SEC data alone builds.
-
-// Get a free key (raises the rate limit) at https://www.openfigi.com/api — optional.
-const OPENFIGI_URL = 'https://api.openfigi.com/v3/mapping';
-const OPENFIGI_API_KEY = '';
-
-// See alpaca-proxy-worker.js — a Cloudflare Worker that holds your real Alpaca
-// keys server-side. Replace with your deployed workers.dev URL to enable.
-const ALPACA_PROXY_URL = 'https://YOUR-WORKER-SUBDOMAIN.workers.dev';
-const alpacaProxyConfigured = !!ALPACA_PROXY_URL && !ALPACA_PROXY_URL.includes('YOUR-WORKER-SUBDOMAIN');
-
-// CUSIPs don't change day to day, so cache resolved tickers in localStorage
-// across visits — this is a real deployed site the user owns, not a sandboxed
-// preview, so persistent client storage is appropriate here.
-const TICKER_CACHE_KEY = 'sd_cusip_ticker_cache_v1';
-let tickerCache = {};
-try { tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}'); } catch (e) { tickerCache = {}; }
-function saveTickerCache() {
-  try { localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(tickerCache)); } catch (e) { /* storage unavailable — non-fatal, just won't persist */ }
-}
-
-// Rate-limited batch queue for OpenFIGI: unauthenticated tier allows 25
-// requests/minute, up to 10 CUSIPs per request. A holdings table can have
-// thousands of rows, so resolution is driven by scroll (see IntersectionObserver
-// below) and batched here rather than firing one request per row.
-let cusipQueue = [];
-let cusipQueueTimer = null;
-const pendingCusipResolvers = {};
-
-function resolveCusipToTicker(cusip) {
-  if (!cusip) return Promise.resolve(null);
-  if (cusip in tickerCache) return Promise.resolve(tickerCache[cusip]);
-  return new Promise(resolve => {
-    (pendingCusipResolvers[cusip] = pendingCusipResolvers[cusip] || []).push(resolve);
-    if (!cusipQueue.includes(cusip)) cusipQueue.push(cusip);
-    if (!cusipQueueTimer) cusipQueueTimer = setTimeout(flushCusipQueue, 300); // debounce so a burst of rows batches together
-  });
-}
-
-async function flushCusipQueue() {
-  cusipQueueTimer = null;
-  if (!cusipQueue.length) return;
-  const batch = cusipQueue.splice(0, 10);
-  const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
-  const settle = (cusip, ticker) => {
-    tickerCache[cusip] = ticker;
-    (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
-    delete pendingCusipResolvers[cusip];
-  };
-
+async function loadInsiderTrades() {
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
-    const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(jobs) });
+    const res = await fetch(SEC_INSIDER_FEED, { headers: { 'Accept': 'application/atom+xml' } });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const results = await res.json();
-    batch.forEach((cusip, i) => {
-      const entry = results[i];
-      let ticker = null;
-      if (entry && Array.isArray(entry.data) && entry.data.length) {
-        // Prefer the US-listed match — the same CUSIP can map to multiple
-        // share classes/exchanges (ADRs, dual listings).
-        const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
-        ticker = match.ticker || null;
-      }
-      settle(cusip, ticker);
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    if (xml.querySelector('parsererror')) throw new Error('Feed did not parse as XML');
+
+    const entries = Array.from(xml.querySelectorAll('entry')).slice(0, 40);
+    if (!entries.length) throw new Error('No entries returned');
+
+    const rows = entries.map(e => {
+      const title = e.querySelector('title')?.textContent || 'Unknown filer';
+      const updated = e.querySelector('updated')?.textContent || '';
+      const link = e.querySelector('link')?.getAttribute('href') || '#';
+      return { title, updated, link };
     });
-    saveTickerCache();
-  } catch (err) {
-    batch.forEach(cusip => settle(cusip, null));
-  }
 
-  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, 3000); // stay well under 25 req/min
-}
+    setFreshness('insider', 'Insiders', 'live', 'updated ' + new Date().toLocaleTimeString());
 
-// Daily bars since a given date, via the Alpaca proxy (never calls Alpaca directly —
-// see the credential note in alpaca-proxy-worker.js for why).
-const barsCache = new Map();
-function fetchBarsSince(ticker, startISO) {
-  if (!alpacaProxyConfigured || !ticker || !startISO) return Promise.resolve(null);
-  const cacheKey = ticker + '|' + startISO;
-  if (barsCache.has(cacheKey)) return barsCache.get(cacheKey);
-  const endISO = new Date().toISOString().slice(0, 10);
-  const promise = fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(ticker)}&start=${startISO}&end=${endISO}`)
-    .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
-    .then(data => (data.bars && data.bars.length >= 2) ? data.bars : null)
-    .catch(() => null);
-  barsCache.set(cacheKey, promise);
-  return promise;
-}
-
-function toISODate(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-}
-
-// Minimal inline SVG sparkline — no charting library needed for a dozen points.
-function buildSparklineSvg(bars, pctChange) {
-  const w = 108, h = 32, pad = 3;
-  const closes = bars.map(b => b.c);
-  const min = Math.min(...closes), max = Math.max(...closes);
-  const range = (max - min) || 1;
-  const stepX = closes.length > 1 ? (w - pad * 2) / (closes.length - 1) : 0;
-  const pts = closes.map((c, i) => [pad + i * stepX, h - pad - ((c - min) / range) * (h - pad * 2)]);
-  const color = pctChange >= 0 ? 'var(--teal)' : 'var(--rose)';
-  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${h - pad} L${pts[0][0].toFixed(1)},${h - pad} Z`;
-  const last = pts[pts.length - 1];
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block">
-    <path d="${area}" fill="${color}" opacity="0.14"></path>
-    <path d="${line}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"></path>
-    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.2" fill="${color}"></circle>
-  </svg>`;
-}
-
-// Wires up lazy, scroll-driven price loading for the holdings table: rows
-// resolve their ticker and fetch price history only once they scroll near
-// the viewport, so a fund with thousands of positions doesn't fire thousands
-// of requests on page load.
-function initPriceContext(filingDateStr) {
-  if (!alpacaProxyConfigured) return;
-  const filingISO = toISODate(filingDateStr);
-  if (!filingISO) return;
-
-  const rows = document.querySelectorAll('tr[data-cusip]');
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      observer.unobserve(entry.target);
-      const row = entry.target;
-      const cusip = row.dataset.cusip;
-      const sparkCell = row.querySelector('.spark-cell');
-      const chgCell = row.querySelector('.chg-cell');
-
-      resolveCusipToTicker(cusip).then(ticker => {
-        if (!ticker) { if (chgCell) chgCell.textContent = '—'; return; }
-        return fetchBarsSince(ticker, filingISO).then(bars => {
-          if (!bars) { if (chgCell) chgCell.textContent = '—'; return; }
-          const pct = ((bars[bars.length - 1].c - bars[0].o) / bars[0].o) * 100;
-          if (chgCell) {
-            chgCell.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-            chgCell.style.color = pct >= 0 ? 'var(--teal)' : 'var(--rose)';
-          }
-          if (sparkCell) sparkCell.innerHTML = buildSparklineSvg(bars, pct);
-        });
-      });
-    });
-  }, { rootMargin: '200px 0px' });
-
-  rows.forEach(r => observer.observe(r));
-}
-
-async function fetchInfoTableHoldings(cik, accessionNoDashes) {
-  const cikTrimmed = String(parseInt(cik, 10));
-  const dirUrl = `https://www.sec.gov/Archives/edgar/data/${cikTrimmed}/${accessionNoDashes}/`;
-  const idxRes = await fetchDirect(dirUrl + 'index.json');
-  const idxData = await idxRes.json();
-  const files = idxData.directory?.item || [];
-  const infoTableFile = files.find(f => /info.*table/i.test(f.name) && /\.xml$/i.test(f.name));
-  if (!infoTableFile) throw new Error('No information table found in filing');
-
-  const xmlRes = await fetchDirect(dirUrl + infoTableFile.name);
-  const xmlText = await xmlRes.text();
-  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
-  if (xml.querySelector('parsererror')) throw new Error('Information table did not parse as XML');
-
-  const entries = Array.from(xml.getElementsByTagName('infoTable'));
-  const holdings = entries.map(entry => {
-    const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
-    const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
-    const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
-    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue, shares }; // already whole dollars (post-2023 filings)
-  }).filter(h => h.issuer);
-
-  holdings.sort((a, b) => b.valueUsd - a.valueUsd);
-  const totalValue = holdings.reduce((sum, h) => sum + h.valueUsd, 0);
-  return { holdings, totalValue, positionCount: holdings.length };
-}
-
-function renderChangeCard(kind, issuer, detail) {
-  return `<div class="change-card ${kind}"><div class="change-issuer">${escHtml(issuer)}</div><div class="change-detail">${detail}</div></div>`;
-}
-
-async function loadFundDetail() {
-  const params = new URLSearchParams(window.location.search);
-  const cik = params.get('cik');
-  const name = params.get('name') || 'Unknown Fund';
-  document.getElementById('fund-title').textContent = name;
-
-  if (!cik) {
-    document.getElementById('page-body').innerHTML = `<div class="status-box error">No fund specified. Go back and click a fund's "Full detail" link from the main dashboard.</div>`;
-    return;
-  }
-
-  try {
-    const subRes = await fetchDirect(`https://data.sec.gov/submissions/CIK${cik}.json`);
-    const subData = await subRes.json();
-    const forms = subData.filings?.recent;
-    if (!forms) throw new Error('No filing history returned');
-
-    const thirteenFIdxs = [];
-    for (let i = 0; i < forms.form.length && thirteenFIdxs.length < 2; i++) {
-      if (forms.form[i].startsWith('13F-HR')) thirteenFIdxs.push(i);
-    }
-    if (!thirteenFIdxs.length) throw new Error('No 13F-HR filings on record for this fund');
-
-    const latestIdx = thirteenFIdxs[0];
-    const priorIdx = thirteenFIdxs.length > 1 ? thirteenFIdxs[1] : null;
-    const latestDate = forms.filingDate[latestIdx];
-    const priorDate = priorIdx !== null ? forms.filingDate[priorIdx] : null;
-
-    document.getElementById('fund-sub').textContent =
-      priorDate ? `Comparing filing from ${latestDate} against prior filing from ${priorDate}` : `Filing from ${latestDate} — no prior 13F-HR on record to compare against`;
-
-    const latestAcc = forms.accessionNumber[latestIdx].replace(/-/g, '');
-    const current = await fetchInfoTableHoldings(cik, latestAcc);
-
-    let prior = null;
-    if (priorIdx !== null) {
-      const priorAcc = forms.accessionNumber[priorIdx].replace(/-/g, '');
-      try { prior = await fetchInfoTableHoldings(cik, priorAcc); } catch (e) { /* proceed without comparison */ }
-    }
-
-    const body = document.getElementById('page-body');
-    let html = `
-      <div class="stat-row">
-        <div class="stat-card"><div class="stat-value">${fmtMoney(current.totalValue)}</div><div class="stat-label">Total Reported Value</div></div>
-        <div class="stat-card"><div class="stat-value">${current.positionCount}</div><div class="stat-label">Positions Held</div></div>
-        <div class="stat-card"><div class="stat-value">${current.holdings.length ? ((current.holdings.slice(0,5).reduce((s,h)=>s+h.valueUsd,0) / current.totalValue) * 100).toFixed(0) + '%' : '—'}</div><div class="stat-label">In Top 5 Holdings</div></div>
+    const body = document.getElementById('insiders-body');
+    body.innerHTML = `
+      <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+        This is the raw SEC filing feed — every Form 4 hitting EDGAR right now, market-wide. Click through to any filing to see the actual transaction (shares, price, buy or sell).
       </div>
-    `;
-
-    if (prior) {
-      const priorByCusip = {};
-      prior.holdings.forEach(h => { priorByCusip[h.cusip] = h; });
-      const currentByCusip = {};
-      current.holdings.forEach(h => { currentByCusip[h.cusip] = h; });
-
-      const newPositions = current.holdings.filter(h => !priorByCusip[h.cusip]).sort((a,b) => b.valueUsd - a.valueUsd);
-      const closedPositions = prior.holdings.filter(h => !currentByCusip[h.cusip]).sort((a,b) => b.valueUsd - a.valueUsd);
-      const changed = current.holdings
-        .filter(h => priorByCusip[h.cusip] && priorByCusip[h.cusip].shares !== h.shares)
-        .map(h => ({ ...h, priorShares: priorByCusip[h.cusip].shares, pctChange: ((h.shares - priorByCusip[h.cusip].shares) / priorByCusip[h.cusip].shares) * 100 }));
-      const increased = changed.filter(h => h.pctChange > 0).sort((a,b) => b.pctChange - a.pctChange);
-      const decreased = changed.filter(h => h.pctChange < 0).sort((a,b) => a.pctChange - b.pctChange);
-
-      html += `<div class="section-title">🟢 New Positions <span class="section-count">${newPositions.length}</span></div>`;
-      html += newPositions.length
-        ? `<div class="change-grid">${newPositions.slice(0,12).map(h => renderChangeCard('new', h.issuer, fmtShares(h.shares) + ' shares · ' + fmtMoney(h.valueUsd))).join('')}</div>`
-        : `<div class="empty-note">No new positions opened since the prior filing.</div>`;
-
-      html += `<div class="section-title">🔴 Closed Positions <span class="section-count">${closedPositions.length}</span></div>`;
-      html += closedPositions.length
-        ? `<div class="change-grid">${closedPositions.slice(0,12).map(h => renderChangeCard('closed', h.issuer, 'Fully exited · was ' + fmtMoney(h.valueUsd))).join('')}</div>`
-        : `<div class="empty-note">No positions were fully closed since the prior filing.</div>`;
-
-      html += `<div class="section-title">📈 Increased Stakes <span class="section-count">${increased.length}</span></div>`;
-      html += increased.length
-        ? `<div class="change-grid">${increased.slice(0,12).map(h => renderChangeCard('up', h.issuer, '+' + h.pctChange.toFixed(0) + '% · ' + fmtShares(h.priorShares) + ' → ' + fmtShares(h.shares) + ' shares')).join('')}</div>`
-        : `<div class="empty-note">No existing positions were increased since the prior filing.</div>`;
-
-      html += `<div class="section-title">📉 Decreased Stakes <span class="section-count">${decreased.length}</span></div>`;
-      html += decreased.length
-        ? `<div class="change-grid">${decreased.slice(0,12).map(h => renderChangeCard('down', h.issuer, h.pctChange.toFixed(0) + '% · ' + fmtShares(h.priorShares) + ' → ' + fmtShares(h.shares) + ' shares')).join('')}</div>`
-        : `<div class="empty-note">No existing positions were decreased since the prior filing.</div>`;
-    } else {
-      html += `<div class="empty-note">No prior 13F-HR filing found for this fund — quarter-over-quarter comparison isn't available yet, but the full current holdings are below.</div>`;
-    }
-
-    html += `<div class="section-title">All Holdings <span class="section-count">${current.holdings.length} positions, sorted by value${alpacaProxyConfigured ? ' <span class="price-source-note">· price context via Alpaca, tickers via OpenFIGI</span>' : ''}</span></div>`;
-    html += `
       <table class="data-table">
-        <thead><tr>
-          <th>Issuer</th><th>Shares</th><th>Value</th><th>% of Portfolio</th>
-          ${alpacaProxyConfigured ? '<th>Chart</th><th title="Price change from filing date to today">Since Filing</th>' : ''}
-        </tr></thead>
+        <thead><tr><th>Filer / Company</th><th>Filed</th><th></th></tr></thead>
         <tbody>
-          ${current.holdings.map(h => `
-            <tr data-cusip="${escHtml(h.cusip)}">
-              <td>${escHtml(h.issuer)}</td>
-              <td class="num">${fmtShares(h.shares)}</td>
-              <td class="num ticker">${fmtMoney(h.valueUsd)}</td>
-              <td class="num">${current.totalValue ? ((h.valueUsd / current.totalValue) * 100).toFixed(1) + '%' : '—'}</td>
-              ${alpacaProxyConfigured ? `
-                <td><div class="spark-cell"></div></td>
-                <td class="num mono chg-cell price-pulse">…</td>
-              ` : ''}
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.title)}</td>
+              <td class="mono" style="color:var(--text-muted)">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
+              <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">View filing →</a></td>
             </tr>
           `).join('')}
         </tbody>
       </table>
     `;
 
-    html += `<div style="margin-top:20px"><a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=13F&dateb=&owner=include&count=10" target="_blank" rel="noopener">View raw filing on SEC EDGAR →</a></div>`;
-
-    body.innerHTML = html;
-    initPriceContext(latestDate);
+    rows.slice(0, 6).forEach(r => {
+      allSignals.push({
+        source: 'insider', tag: 'INSIDER', entity: r.title,
+        detail: 'New Form 4 filed with the SEC', direction: 'neutral',
+        time: r.updated, link: r.link, sortValue: r.updated ? new Date(r.updated).getTime() : 0
+      });
+    });
+    renderSignals();
   } catch (err) {
-    document.getElementById('page-body').innerHTML = `
+    setFreshness('insider', 'Insiders', 'stale', 'unreachable');
+    document.getElementById('insiders-body').innerHTML = `
       <div class="status-box error">
-        Couldn't load this fund's filing data (${escHtml(err.message)}).<br><br>
-        You can check it directly at <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${escHtml(cik || '')}&type=13F" target="_blank" rel="noopener">sec.gov EDGAR →</a>
+        Couldn't reach the live SEC filing feed from this page (${escHtml(err.message)}).<br>
+        This can happen if SEC's server blocks direct browser requests from this domain.<br><br>
+        You can always check the source directly: <a class="fund-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4" target="_blank" rel="noopener">sec.gov Form 4 filings →</a>
       </div>`;
   }
 }
 
-loadFundDetail();
+// ══════════════════════════════════════════════════════════════
+// SOURCE 2 — INSTITUTIONAL HOLDINGS (13F, curated watchlist)
+// ══════════════════════════════════════════════════════════════
+async function loadInstitutions() {
+  const body = document.getElementById('institutions-body');
+  body.innerHTML = '';
+  let anySuccess = false;
+
+  for (const fund of FUND_WATCHLIST) {
+    try {
+      const res = await fetch(`https://data.sec.gov/submissions/CIK${fund.cik}.json`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const forms = data.filings?.recent;
+      if (!forms) throw new Error('No filing history returned');
+
+      let latest13FIdx = -1;
+      for (let i = 0; i < forms.form.length; i++) {
+        if (forms.form[i].startsWith('13F')) { latest13FIdx = i; break; }
+      }
+      if (latest13FIdx === -1) throw new Error('No 13F on file');
+
+      const accessionNo = forms.accessionNumber[latest13FIdx].replace(/-/g, '');
+      const filingDate = forms.filingDate[latest13FIdx];
+      const filingUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${fund.cik}&type=13F&dateb=&owner=include&count=10`;
+
+      const card = document.createElement('div');
+      card.className = 'fund-card';
+      card.innerHTML = `
+        <div class="fund-name">${escHtml(fund.name)}</div>
+        <div class="fund-meta">Last 13F filed ${escHtml(filingDate)}</div>
+        <div class="status-box" style="padding:16px;font-size:11px;text-align:left">
+          Position-level holdings require parsing this filing's information table directly.
+        </div>
+        <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">View full 13F on SEC EDGAR →</a>
+      `;
+      body.appendChild(card);
+      anySuccess = true;
+
+      allSignals.push({
+        source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
+        detail: `Filed 13F for the quarter — holdings as of ${filingDate}`, direction: 'neutral',
+        time: filingDate, link: filingUrl, sortValue: new Date(filingDate).getTime()
+      });
+    } catch (err) {
+      const card = document.createElement('div');
+      card.className = 'fund-card';
+      card.innerHTML = `
+        <div class="fund-name">${escHtml(fund.name)}</div>
+        <div class="status-box error" style="padding:12px;font-size:11px">Couldn't load: ${escHtml(err.message)}</div>
+      `;
+      body.appendChild(card);
+    }
+  }
+
+  setFreshness('institution', 'Hedge Funds', anySuccess ? 'stale' : 'stale', 'quarterly, up to 45-day lag');
+  renderSignals();
+}
+
+// ══════════════════════════════════════════════════════════════
+// SOURCE 3 — CONGRESSIONAL TRADES
+// ══════════════════════════════════════════════════════════════
+async function loadCongressTrades() {
+  try {
+    const res = await fetch(CONGRESS_HOUSE_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) throw new Error('Empty dataset returned');
+
+    const rows = data
+      .filter(t => t.transaction_date)
+      .sort((a, b) => new Date(b.disclosure_date || b.transaction_date) - new Date(a.disclosure_date || a.transaction_date))
+      .slice(0, 40);
+
+    setFreshness('congress', 'Congress', 'stale', 'up to 45-day lag');
+
+    const body = document.getElementById('congress-body');
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Disclosed</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
+              <td class="ticker">${escHtml(r.ticker || '—')}</td>
+              <td>${escHtml(r.type || '—')}</td>
+              <td class="num">${escHtml(r.amount || '—')}</td>
+              <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    rows.slice(0, 6).forEach(r => {
+      const isBuy = /purchase|buy/i.test(r.type || '');
+      const isSell = /sale|sell/i.test(r.type || '');
+      allSignals.push({
+        source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
+        detail: `${r.type || 'Trade'} disclosed ${r.disclosure_date || ''}`, direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
+        time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0
+      });
+    });
+    renderSignals();
+  } catch (err) {
+    setFreshness('congress', 'Congress', 'stale', 'unreachable');
+    document.getElementById('congress-body').innerHTML = `
+      <div class="status-box error">
+        Couldn't reach the congressional trade dataset (${escHtml(err.message)}).<br>
+        This tracker relies on the open-source <code>house-stock-watcher</code> project's public data file — if that project's hosting has moved,
+        update <code>CONGRESS_HOUSE_URL</code> near the top of this file's script with a current source.<br><br>
+        You can check disclosures directly at <a class="fund-link" href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov →</a>
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMBINED SIGNALS VIEW
+// ══════════════════════════════════════════════════════════════
+function renderSignals() {
+  const body = document.getElementById('signals-body');
+  if (!allSignals.length) return;
+  const sorted = [...allSignals].sort((a, b) => b.sortValue - a.sortValue).slice(0, 20);
+  body.innerHTML = sorted.map(s => `
+    <div class="signal-row">
+      <div class="ping-wrap"><div class="ping ${s.direction}" style="width:${s.direction === 'neutral' ? 10 : 14}px;height:${s.direction === 'neutral' ? 10 : 14}px"></div></div>
+      <div class="signal-main">
+        <div class="signal-entity">${escHtml(s.entity)}</div>
+        <div class="signal-detail">${escHtml(s.detail)}</div>
+      </div>
+      <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
+      <div class="signal-meta">${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════
+loadInsiderTrades();
+loadInstitutions();
+loadCongressTrades();
 </script>
 </body>
 </html>
