@@ -66,7 +66,7 @@
 // means ANY website could call your proxy (they'd still be rate-limited
 // by your Alpaca account, but it's safer to lock this down once you know
 // your real domain).
-const ALLOWED_ORIGIN = 'https://yourusername.github.io';
+const ALLOWED_ORIGIN = 'https://cjosh4toyotas-stack.github.io';
 
 // SEC's fair-access policy requires every request to identify a real
 // contact — browsers block JS from setting User-Agent, which is exactly
