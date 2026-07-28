@@ -384,6 +384,7 @@ footer a { color: var(--amber); }
     </div>
     <div class="inline-msg" id="watchlist-msg"></div>
     <div id="watchlist-body" class="watch-list" style="margin-top:14px"></div>
+    <div class="chart-note" id="live-stream-status"></div>
     <div class="chart-note">Saved locally in this browser (not synced across devices) — add tickers here, or click "+ watch" from any chart or screener row.</div>
   </div>
 </main>
@@ -926,6 +927,7 @@ function addToWatchlist(rawSymbol) {
   if (input) input.value = '';
   renderWatchlist();
   renderTickerTape();
+  subscribeLiveSymbol(symbol);
 }
 
 function removeFromWatchlist(symbol) {
@@ -934,8 +936,130 @@ function removeFromWatchlist(symbol) {
   renderTickerTape();
 }
 
-// ── Ticker tape — scrolls the saved watchlist with live price/change,
-// duplicated once so the loop is seamless (CSS animates a -50% shift).
+// ══════════════════════════════════════════════════════════════
+// LIVE STREAM — real-time trades/quotes via the Worker's /stream relay
+// ══════════════════════════════════════════════════════════════
+// One WebSocket for the whole page, shared by the ticker tape and the
+// Watchlist tab. liveQuotes holds the last-known price per symbol plus
+// the prevClose seeded once via /bars (see renderTickerTape/renderWatchlist
+// above) — % change is computed from those two each time a new trade or
+// quote arrives.
+const liveQuotes = {}; // symbol -> { last, prevClose }
+let liveSocket = null;
+let liveReconnectTimer = null;
+let liveReconnectAttempts = 0;
+
+function liveStreamUrl() {
+  if (!ALPACA_PROXY_URL) return null;
+  return ALPACA_PROXY_URL.replace(/^http/, 'ws') + '/stream';
+}
+
+function connectLiveStream() {
+  const wsUrl = liveStreamUrl();
+  if (!wsUrl) return;
+  if (liveSocket && (liveSocket.readyState === WebSocket.OPEN || liveSocket.readyState === WebSocket.CONNECTING)) return;
+
+  let ws;
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch {
+    scheduleLiveReconnect();
+    return;
+  }
+  liveSocket = ws;
+
+  ws.addEventListener('open', () => {
+    liveReconnectAttempts = 0;
+    const symbols = getWatchlist();
+    if (symbols.length) ws.send(JSON.stringify({ action: 'subscribe', symbols }));
+  });
+
+  ws.addEventListener('message', (event) => {
+    let messages;
+    try { messages = JSON.parse(event.data); } catch { return; }
+    if (!Array.isArray(messages)) messages = [messages];
+
+    for (const msg of messages) {
+      if (msg.T === 't' || msg.T === 'q') {
+        const sym = msg.S;
+        if (!sym) continue;
+        const price = msg.T === 't'
+          ? msg.p
+          : (msg.bp != null && msg.ap != null ? (msg.bp + msg.ap) / 2 : (msg.ap ?? msg.bp));
+        if (price == null) continue;
+        liveQuotes[sym] = liveQuotes[sym] || {};
+        liveQuotes[sym].last = price;
+        updateLivePriceDisplays(sym);
+      }
+      // relay_status / relay_error are informational — surfaced in the
+      // Watchlist tab's status line rather than blocking anything.
+      if (msg.T === 'relay_status' || msg.T === 'relay_error') {
+        setLiveStatus(msg);
+      }
+    }
+  });
+
+  ws.addEventListener('close', () => scheduleLiveReconnect());
+  ws.addEventListener('error', () => { /* close event follows; handled there */ });
+}
+
+function scheduleLiveReconnect() {
+  clearTimeout(liveReconnectTimer);
+  liveReconnectAttempts++;
+  const delay = Math.min(30000, 1000 * 2 ** Math.min(liveReconnectAttempts, 5));
+  liveReconnectTimer = setTimeout(connectLiveStream, delay);
+}
+
+function subscribeLiveSymbol(sym) {
+  if (!TICKER_CLIENT_RE.test(sym)) return;
+  if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+    liveSocket.send(JSON.stringify({ action: 'subscribe', symbols: [sym] }));
+  } else {
+    connectLiveStream();
+  }
+}
+
+function setLiveStatus(msg) {
+  const el = document.getElementById('live-stream-status');
+  if (!el) return;
+  if (msg.T === 'relay_error') {
+    el.textContent = 'Live stream: ' + msg.msg;
+    return;
+  }
+  el.textContent = msg.alpacaAuthed
+    ? 'Live stream connected.'
+    : 'Live stream: waiting on Alpaca authentication…';
+}
+
+function updateLivePriceDisplays(sym) {
+  const q = liveQuotes[sym];
+  if (!q || q.last == null) return;
+  const prevClose = q.prevClose;
+  const change = prevClose ? q.last - prevClose : null;
+  const pct = prevClose ? (change / prevClose) * 100 : null;
+  const dir = change != null && change >= 0 ? 'up' : 'down';
+
+  const watchEl = document.getElementById('watch-price-' + sym);
+  if (watchEl) {
+    watchEl.innerHTML = pct != null
+      ? `$${q.last.toFixed(2)} <span class="price-change ${dir}">${change >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`
+      : `$${q.last.toFixed(2)}`;
+  }
+
+  document.querySelectorAll(`.ticker-tape-item[data-sym="${sym}"] .tt-price`).forEach(el => {
+    el.textContent = `$${q.last.toFixed(2)}`;
+  });
+  if (pct != null) {
+    document.querySelectorAll(`.ticker-tape-item[data-sym="${sym}"] .tt-chg`).forEach(el => {
+      el.className = `tt-chg ${dir}`;
+      el.textContent = `${dir === 'up' ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%`;
+    });
+  }
+}
+
+// ── Ticker tape — seeds each symbol's previous close once via /bars, then
+// the live stream (below) keeps the price and % change moving from there.
+// Duplicated once so the loop is seamless (CSS animates a -50% shift).
 function renderTickerTape() {
   const track = document.getElementById('ticker-tape-track');
   const list = getWatchlist();
@@ -958,12 +1082,11 @@ function renderTickerTape() {
       .then(res => res.json().then(b => ({ ok: res.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || !b.bars || !b.bars.length) return null;
-        const bars = b.bars;
-        const last = bars[bars.length - 1];
-        const prev = bars.length > 1 ? bars[bars.length - 2] : last;
-        const change = last.c - prev.c;
-        const pct = prev.c ? (change / prev.c) * 100 : 0;
-        return { sym, price: last.c, pct };
+        const last = b.bars[b.bars.length - 1];
+        liveQuotes[sym] = liveQuotes[sym] || {};
+        liveQuotes[sym].prevClose = last.c;
+        if (liveQuotes[sym].last == null) liveQuotes[sym].last = last.c;
+        return sym;
       })
       .catch(() => null)
   )).then(results => {
@@ -972,14 +1095,16 @@ function renderTickerTape() {
       track.innerHTML = '<span class="ticker-tape-msg">Couldn\'t load live prices for the tape right now.</span>';
       return;
     }
-    const itemsHtml = items.map(it => `
-      <span class="ticker-tape-item">
-        <span class="tt-sym">${escHtml(it.sym)}</span>
-        <span>$${it.price.toFixed(2)}</span>
-        <span class="tt-chg ${it.pct >= 0 ? 'up' : 'down'}">${it.pct >= 0 ? '▲' : '▼'} ${Math.abs(it.pct).toFixed(2)}%</span>
+    const itemsHtml = items.map(sym => `
+      <span class="ticker-tape-item" data-sym="${escHtml(sym)}">
+        <span class="tt-sym">${escHtml(sym)}</span>
+        <span class="tt-price">$${liveQuotes[sym].last.toFixed(2)}</span>
+        <span class="tt-chg">live</span>
       </span>
     `).join('');
     track.innerHTML = itemsHtml + itemsHtml; // duplicated for a seamless loop
+    items.forEach(sym => updateLivePriceDisplays(sym));
+    connectLiveStream();
   });
 }
 
@@ -1011,20 +1136,19 @@ async function renderWatchlist() {
       .then(res => res.json().then(b => ({ ok: res.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || !b.bars || !b.bars.length) throw new Error('no data');
-        const bars = b.bars;
-        const last = bars[bars.length - 1];
-        const prev = bars.length > 1 ? bars[bars.length - 2] : last;
-        const change = last.c - prev.c;
-        const pct = prev.c ? (change / prev.c) * 100 : 0;
-        const dir = change >= 0 ? 'up' : 'down';
-        const el = document.getElementById('watch-price-' + sym);
-        if (el) el.innerHTML = `$${last.c.toFixed(2)} <span class="price-change ${dir}">${change >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+        const last = b.bars[b.bars.length - 1];
+        liveQuotes[sym] = liveQuotes[sym] || {};
+        liveQuotes[sym].prevClose = last.c;
+        if (liveQuotes[sym].last == null) liveQuotes[sym].last = last.c;
+        updateLivePriceDisplays(sym);
       })
       .catch(() => {
         const el = document.getElementById('watch-price-' + sym);
         if (el) el.textContent = '—';
       });
   }
+
+  connectLiveStream();
 }
 
 // ══════════════════════════════════════════════════════════════
