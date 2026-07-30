@@ -4,32 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fund Detail — Signal Desk</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0d0b08; --surface: #17140f; --surface2: #1f1b14;
-  --border: rgba(255,180,84,0.12); --amber: #ffb454; --amber-dim: rgba(255,180,84,0.14); --amber-glow: rgba(255,180,84,0.35);
-  --teal: #4fd1c5; --teal-dim: rgba(79,209,197,0.12);
-  --rose: #e08a8a;
-  --green: #4ade80;
-  --text: #f5f0e6; --text-dim: rgba(245,240,230,0.6); --text-muted: rgba(245,240,230,0.32);
+  /* Graphite + circuit-green + bullion-gold — matches the main dashboard theme. */
+  --bg: #060706; --surface: #101211; --surface2: #171a18;
+  --border: rgba(122,230,90,0.16); --amber: #ffc933; --amber-dim: rgba(255,201,51,0.14); --amber-glow: rgba(255,201,51,0.45);
+  --teal: #7ae65a; --teal-dim: rgba(122,230,90,0.14);
+  --rose: #ff5c72;
+  --green: #39ff8f;
+  --text: #f3f5f2; --text-dim: rgba(243,245,242,0.64); --text-muted: rgba(243,245,242,0.36);
 }
-html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
+html, body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
 
 header {
-  position: sticky; top: 0; z-index: 10; background: rgba(13,11,8,0.92); backdrop-filter: blur(14px);
+  position: sticky; top: 0; z-index: 10; background: rgba(6,7,6,0.86); backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border); padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .brand-mark {
-  width: 34px; height: 34px; border-radius: 6px; background: var(--amber-dim); border: 1px solid var(--amber-glow);
-  display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 16px;
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--teal) 0%, var(--amber) 100%);
+  box-shadow: 0 0 18px rgba(122,230,90,0.28);
+  display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: #06110a; font-size: 16px;
 }
-.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
 .brand-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
 .back-link { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--teal); text-decoration: none; }
 .back-link:hover { text-decoration: underline; }
@@ -37,7 +40,7 @@ header {
 main { max-width: 1100px; margin: 0 auto; padding: 32px; }
 
 .fund-header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.fund-title { font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; }
+.fund-title { font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.4px; }
 .fund-sub { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-top: 6px; }
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
@@ -84,6 +87,16 @@ main { max-width: 1100px; margin: 0 auto; padding: 32px; }
 .fund-link { color: var(--teal); font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-decoration: none; }
 .fund-link:hover { text-decoration: underline; }
 .empty-note { font-size: 12px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 12px 0; }
+
+.ls-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.ls-chip {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-family: 'IBM Plex Mono', monospace;
+  padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-dim); cursor: help;
+}
+.ls-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.ls-chip.ls-long { border-color: rgba(122,230,90,0.35); color: var(--teal); }
+.ls-chip.ls-bull { border-color: var(--amber-glow); color: var(--amber); }
+.ls-chip.ls-bear { border-color: rgba(255,92,114,0.32); color: var(--rose); }
 
 footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -332,16 +345,21 @@ async function fetchInfoTableHoldings(cik, accessionNoDashes) {
   if (xml.querySelector('parsererror')) throw new Error('Information table did not parse as XML');
 
   const entries = Array.from(xml.getElementsByTagName('infoTable'));
-  const holdings = entries.map(entry => {
+  const all = entries.map(entry => {
     const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
     const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
     const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
-    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue, shares }; // already whole dollars (post-2023 filings)
+    const putCall = getTag('putCall').toUpperCase(); // 'PUT' | 'CALL' | '' — the only long/short-style signal 13F discloses
+    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue, shares, putCall }; // already whole dollars (post-2023 filings)
   }).filter(h => h.issuer);
 
-  holdings.sort((a, b) => b.valueUsd - a.valueUsd);
+  // "holdings" stays equity-only (blank putCall) so the shares/value math and
+  // the QoQ diff below reflect actual long stock positions, not options notional.
+  const holdings = all.filter(h => !h.putCall).sort((a, b) => b.valueUsd - a.valueUsd);
+  const calls = all.filter(h => h.putCall === 'CALL').sort((a, b) => b.valueUsd - a.valueUsd);
+  const puts = all.filter(h => h.putCall === 'PUT').sort((a, b) => b.valueUsd - a.valueUsd);
   const totalValue = holdings.reduce((sum, h) => sum + h.valueUsd, 0);
-  return { holdings, totalValue, positionCount: holdings.length };
+  return { holdings, calls, puts, totalValue, positionCount: all.length };
 }
 
 function renderChangeCard(kind, issuer, detail) {
@@ -388,12 +406,21 @@ async function loadFundDetail() {
       try { prior = await fetchInfoTableHoldings(cik, priorAcc); } catch (e) { /* proceed without comparison */ }
     }
 
+    const callValue = current.calls.reduce((s, h) => s + h.valueUsd, 0);
+    const putValue = current.puts.reduce((s, h) => s + h.valueUsd, 0);
+
     const body = document.getElementById('page-body');
     let html = `
       <div class="stat-row">
-        <div class="stat-card"><div class="stat-value">${fmtMoney(current.totalValue)}</div><div class="stat-label">Total Reported Value</div></div>
-        <div class="stat-card"><div class="stat-value">${current.positionCount}</div><div class="stat-label">Positions Held</div></div>
+        <div class="stat-card"><div class="stat-value">${fmtMoney(current.totalValue)}</div><div class="stat-label">Total Long Equity Value</div></div>
+        <div class="stat-card"><div class="stat-value">${current.holdings.length}</div><div class="stat-label">Long Positions Held</div></div>
         <div class="stat-card"><div class="stat-value">${current.holdings.length ? ((current.holdings.slice(0,5).reduce((s,h)=>s+h.valueUsd,0) / current.totalValue) * 100).toFixed(0) + '%' : '—'}</div><div class="stat-label">In Top 5 Holdings</div></div>
+      </div>
+
+      <div class="ls-row" title="Derived live from this filing's putCall field — the only long/short-style directionality 13F legally requires. True short sales are never disclosed on a 13F.">
+        <div class="ls-chip ls-long"><span class="ls-dot"></span>Long equity — ${current.holdings.length} positions · ${fmtMoney(current.totalValue)}</div>
+        <div class="ls-chip ls-bull"><span class="ls-dot"></span>Bullish (call options) — ${current.calls.length} · ${fmtMoney(callValue)}</div>
+        <div class="ls-chip ls-bear"><span class="ls-dot"></span>Bearish (put options) — ${current.puts.length} · ${fmtMoney(putValue)}</div>
       </div>
     `;
 
