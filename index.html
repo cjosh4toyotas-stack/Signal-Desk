@@ -169,7 +169,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   border-bottom: 1px solid var(--border); font-weight: 600;
 }
 .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-.data-table tr:hover td { background: rgba(47,125,255,0.05); }
+.data-table tr:hover td { background: rgba(122,230,90,0.05); }
 .num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
 
 /* ── STATUS / EMPTY STATES ────────────────────────────────── */
@@ -194,7 +194,9 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .fund-holdings { display: flex; flex-direction: column; gap: 6px; }
 .fund-holding-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .fund-holding-row:last-child { border-bottom: none; }
-.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
+.ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; text-decoration: none; cursor: pointer; }
+.ticker:hover { text-decoration: underline; }
+.ticker-cell { min-width: 56px; }
 .fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
 .fund-link:hover { text-decoration: underline; }
 
@@ -226,6 +228,13 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .chg-badge.up { color: var(--blue); }
 .chg-badge.down { color: var(--amber); }
 .empty-note { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 8px 0; }
+
+.badge-pill { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; }
+.badge-pill.badge-new { background: rgba(122,230,90,0.14); color: var(--blue); }
+.badge-pill.badge-held { background: var(--surface2); color: var(--text-muted); }
+.mini-table { font-size: 11px; margin: 10px 0 6px; }
+.mini-table th { padding: 6px 8px; font-size: 9px; }
+.mini-table td { padding: 6px 8px; }
 
 /* ── PRICE CHARTS ─────────────────────────────────────────── */
 .chart-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
@@ -493,6 +502,76 @@ function fmtVol(n) {
 
 function fmtShares(n) { return Math.round(n).toLocaleString('en-US'); }
 
+// A ticker anywhere in Signal Desk links straight into the stock deep-dive
+// page — price/volume chart, which tracked hedge funds are long/short it,
+// insider Form 4s, and congressional trades, all for that one symbol.
+function tickerLink(sym, issuer) {
+  if (!sym) return '<span class="ticker">—</span>';
+  const url = `stock.html?symbol=${encodeURIComponent(sym)}${issuer ? '&issuer=' + encodeURIComponent(issuer) : ''}`;
+  return `<a class="ticker" href="${url}" title="Deep dive on ${escHtml(sym)}">${escHtml(sym)}</a>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CUSIP → TICKER (OpenFIGI) — same resolver and cache key as fund.html, so
+// a ticker resolved on one page is already warm on the other. Entirely
+// optional/self-healing: unresolved CUSIPs just render without a ticker link.
+// ══════════════════════════════════════════════════════════════
+const OPENFIGI_URL = 'https://api.openfigi.com/v3/mapping';
+const OPENFIGI_API_KEY = '';
+
+const TICKER_CACHE_KEY = 'sd_cusip_ticker_cache_v1';
+let tickerCache = {};
+try { tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}'); } catch (e) { tickerCache = {}; }
+function saveTickerCache() {
+  try { localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(tickerCache)); } catch (e) { /* non-fatal */ }
+}
+
+let cusipQueue = [];
+let cusipQueueTimer = null;
+const pendingCusipResolvers = {};
+
+function resolveCusipToTicker(cusip) {
+  if (!cusip) return Promise.resolve(null);
+  if (cusip in tickerCache) return Promise.resolve(tickerCache[cusip]);
+  return new Promise(resolve => {
+    (pendingCusipResolvers[cusip] = pendingCusipResolvers[cusip] || []).push(resolve);
+    if (!cusipQueue.includes(cusip)) cusipQueue.push(cusip);
+    if (!cusipQueueTimer) cusipQueueTimer = setTimeout(flushCusipQueue, 300);
+  });
+}
+
+async function flushCusipQueue() {
+  cusipQueueTimer = null;
+  if (!cusipQueue.length) return;
+  const batch = cusipQueue.splice(0, 10);
+  const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
+  const settle = (cusip, ticker) => {
+    tickerCache[cusip] = ticker;
+    (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
+    delete pendingCusipResolvers[cusip];
+  };
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
+    const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(jobs) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const results = await res.json();
+    batch.forEach((cusip, i) => {
+      const entry = results[i];
+      let ticker = null;
+      if (entry && Array.isArray(entry.data) && entry.data.length) {
+        const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
+        ticker = match.ticker || null;
+      }
+      settle(cusip, ticker);
+    });
+    saveTickerCache();
+  } catch (err) {
+    batch.forEach(cusip => settle(cusip, null));
+  }
+  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, 3000);
+}
+
 // ══════════════════════════════════════════════════════════════
 // 13F FETCH HELPERS — sec.gov/Archives doesn't send CORS headers, so a
 // direct fetch is tried first and a public CORS proxy chain is the
@@ -669,11 +748,12 @@ async function loadInstitutions() {
 
       const current = await fetchInfoTableHoldings(fund.cik, latestAcc);
 
+      let prior = null;
       let changeBadges = '';
       if (idxs.length > 1) {
         try {
           const priorAcc = forms.accessionNumber[idxs[1]].replace(/-/g, '');
-          const prior = await fetchInfoTableHoldings(fund.cik, priorAcc);
+          prior = await fetchInfoTableHoldings(fund.cik, priorAcc);
           const newCount = current.holdings.filter(h => !prior.byCusip[h.cusip]).length;
           const closedCount = prior.holdings.filter(h => !current.byCusip[h.cusip]).length;
           let upCount = 0, downCount = 0;
@@ -688,13 +768,36 @@ async function loadInstitutions() {
               ${renderChangeBadge('up', '▲ ADDED', upCount)}
               ${renderChangeBadge('down', '▼ TRIMMED', downCount)}
             </div>`;
-        } catch (e) { /* comparison optional — proceed without it */ }
+        } catch (e) { prior = null; /* comparison optional — proceed without it */ }
       }
 
       const callValue = current.calls.reduce((s, h) => s + h.valueUsd, 0);
       const putValue = current.puts.reduce((s, h) => s + h.valueUsd, 0);
       const longValue = current.holdings.reduce((s, h) => s + h.valueUsd, 0);
+      const bookValue = longValue + callValue + putValue;
       const top5 = current.holdings.slice(0, 5);
+
+      // Per-stock rows — every disclosed position, tagged with direction and
+      // sorted by size, not just the top long equity names. Dates are
+      // quarter-grained (NEW this filing vs HELD since the prior one) because
+      // that's genuinely all a 13F discloses — it has no trade-date field.
+      const allCurrent = [
+        ...current.holdings.map(h => ({ ...h, direction: 'LONG' })),
+        ...current.calls.map(h => ({ ...h, direction: 'CALL' })),
+        ...current.puts.map(h => ({ ...h, direction: 'PUT' })),
+      ].sort((a, b) => b.valueUsd - a.valueUsd);
+      const topStocks = allCurrent.slice(0, 8);
+
+      const priorByKey = {};
+      if (prior) {
+        [
+          ...prior.holdings.map(h => ({ ...h, direction: 'LONG' })),
+          ...prior.calls.map(h => ({ ...h, direction: 'CALL' })),
+          ...prior.puts.map(h => ({ ...h, direction: 'PUT' })),
+        ].forEach(h => { priorByKey[h.cusip + '|' + h.direction] = h; });
+      }
+      const dirClass = { LONG: 'ls-long', CALL: 'ls-bull', PUT: 'ls-bear' };
+      const dirAbbr = { LONG: 'LONG', CALL: 'CALL', PUT: 'PUT' };
 
       const card = document.createElement('div');
       card.className = 'fund-card fund-card-rich';
@@ -716,13 +819,26 @@ async function loadInstitutions() {
 
         ${changeBadges}
 
-        <div class="fund-holdings">
-          ${top5.length ? top5.map(h => `
-            <div class="fund-holding-row">
-              <span>${escHtml(h.issuer)}</span>
-              <span class="num mono">${fmtMoney(h.valueUsd)} <span style="color:var(--text-muted)">· ${longValue ? ((h.valueUsd/longValue)*100).toFixed(1) : '0.0'}%</span></span>
-            </div>`).join('') : '<div class="empty-note">No long equity positions reported.</div>'}
-        </div>
+        <table class="data-table mini-table">
+          <thead><tr><th>Ticker</th><th>Dir</th><th>Value</th><th>Status</th><th>Snapshot</th></tr></thead>
+          <tbody>
+            ${topStocks.length ? topStocks.map(h => {
+              const key = h.cusip + '|' + h.direction;
+              const isNew = prior ? !priorByKey[key] : null;
+              const statusHtml = isNew === null ? '<span style="color:var(--text-muted)">—</span>'
+                : isNew ? '<span class="badge-pill badge-new">NEW</span>'
+                : '<span class="badge-pill badge-held">HELD</span>';
+              return `
+              <tr data-cusip="${escHtml(h.cusip)}" data-issuer="${escHtml(h.issuer)}">
+                <td class="ticker-cell mono">···</td>
+                <td><span class="ls-chip ${dirClass[h.direction]}" style="padding:2px 6px;font-size:9px">${dirAbbr[h.direction]}</span></td>
+                <td class="num mono">${fmtMoney(h.valueUsd)}</td>
+                <td>${statusHtml}</td>
+                <td class="mono" style="font-size:10px;color:var(--text-muted)">${escHtml(filingDate)}</td>
+              </tr>`;
+            }).join('') : `<tr><td colspan="5" class="empty-note">No positions reported.</td></tr>`}
+          </tbody>
+        </table>
 
         <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">
           <a class="fund-link" href="${detailUrl}">Full holdings &amp; positioning →</a>
@@ -757,6 +873,20 @@ async function loadInstitutions() {
   body.appendChild(note);
   cards.forEach(c => body.appendChild(c));
 
+  // Bounded resolution: at most 8 stocks/fund × 6 funds ≈ 48 CUSIPs, well
+  // within OpenFIGI's free batch limits — resolved immediately (not
+  // scroll-gated like fund.html's full holdings table) since the count is
+  // small either way.
+  document.querySelectorAll('#institutions-body tr[data-cusip]').forEach(row => {
+    const cusip = row.dataset.cusip;
+    const issuer = row.dataset.issuer || '';
+    const cell = row.querySelector('.ticker-cell');
+    resolveCusipToTicker(cusip).then(ticker => {
+      if (!cell) return;
+      cell.innerHTML = ticker ? tickerLink(ticker, issuer) : '<span style="color:var(--text-muted)">—</span>';
+    });
+  });
+
   setFreshness('institution', 'Hedge Funds', anySuccess ? 'live' : 'stale', 'quarterly, up to 45-day lag');
   renderSignals();
 }
@@ -787,7 +917,7 @@ async function loadCongressTrades() {
           ${rows.map(r => `
             <tr>
               <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
-              <td>${r.ticker ? `<span class="ticker" style="cursor:pointer" title="View price chart" onclick="switchTab('charts'); loadChart('${escHtml(r.ticker)}')">${escHtml(r.ticker)}</span>` : '<span class="ticker">—</span>'}</td>
+              <td>${tickerLink(r.ticker)}</td>
               <td>${escHtml(r.type || '—')}</td>
               <td class="num">${escHtml(r.amount || '—')}</td>
               <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
@@ -971,8 +1101,8 @@ function drawCandles() {
   const slot = plotW / bars.length;
   const bodyW = Math.max(2, Math.min(10, slot * 0.6));
 
-  ctx.strokeStyle = 'rgba(201,169,97,0.08)';
-  ctx.fillStyle = 'rgba(245,240,230,0.32)';
+  ctx.strokeStyle = 'rgba(255,201,51,0.08)';
+  ctx.fillStyle = 'rgba(243,245,242,0.32)';
   ctx.font = '10px IBM Plex Mono, monospace';
   ctx.textAlign = 'left';
   const gridLines = 5;
@@ -986,7 +1116,7 @@ function drawCandles() {
   bars.forEach((b, i) => {
     const x = padL + slot * i + slot / 2;
     const up = b.c >= b.o;
-    const color = up ? '#4fd1c5' : '#e08a8a';
+    const color = up ? '#39ff8f' : '#ff5c72';
     ctx.strokeStyle = color; ctx.fillStyle = color;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1000,7 +1130,7 @@ function drawCandles() {
 
   if (chartHoverIndex !== null && bars[chartHoverIndex]) {
     const x = padL + slot * chartHoverIndex + slot / 2;
-    ctx.strokeStyle = 'rgba(47,125,255,0.55)';
+    ctx.strokeStyle = 'rgba(122,230,90,0.55)';
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
     ctx.setLineDash([]);
@@ -1046,7 +1176,7 @@ function drawVolume() {
   bars.forEach((b, i) => {
     const x = padL + slot * i + slot / 2;
     const up = b.c >= b.o;
-    ctx.fillStyle = up ? 'rgba(79,209,197,0.5)' : 'rgba(224,138,138,0.5)';
+    ctx.fillStyle = up ? 'rgba(57,255,143,0.5)' : 'rgba(255,92,114,0.5)';
     const h = maxV ? (b.v / maxV) * (H - 4) : 0;
     ctx.fillRect(x - bodyW / 2, H - h, bodyW, h);
   });
@@ -1297,7 +1427,7 @@ async function renderWatchlist() {
 
   body.innerHTML = list.map(sym => `
     <div class="watch-row">
-      <span class="ticker" style="cursor:pointer" title="View price chart" onclick="switchTab('charts'); loadChart('${sym}')">${sym}</span>
+      ${tickerLink(sym)}
       <span class="watch-price mono" id="watch-price-${sym}">${ALPACA_PROXY_URL ? 'loading…' : '—'}</span>
       <button class="chart-jump-btn" onclick="removeFromWatchlist('${sym}')" title="Remove from watchlist">remove</button>
     </div>
@@ -1372,7 +1502,7 @@ function loadScreener() {
             <tbody>
               ${rows.map(r => `
                 <tr>
-                  <td><span class="ticker" style="cursor:pointer" onclick="switchTab('charts'); loadChart('${escHtml(r.symbol)}')">${escHtml(r.symbol)}</span></td>
+                  <td>${tickerLink(r.symbol)}</td>
                   <td class="num">${fmtVol(r.volume)}</td>
                   <td class="num">${r.trade_count != null ? fmtVol(r.trade_count) : '—'}</td>
                   <td><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(r.symbol)}')">+ watch</button></td>
@@ -1393,7 +1523,7 @@ function loadScreener() {
                 const price = r.price != null ? r.price : 0;
                 return `
                 <tr>
-                  <td><span class="ticker" style="cursor:pointer" onclick="switchTab('charts'); loadChart('${escHtml(r.symbol)}')">${escHtml(r.symbol)}</span></td>
+                  <td>${tickerLink(r.symbol)}</td>
                   <td class="num">$${price.toFixed(2)}</td>
                   <td class="num price-change ${dir}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</td>
                   <td><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(r.symbol)}')">+ watch</button></td>
