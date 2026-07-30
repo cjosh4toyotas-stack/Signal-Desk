@@ -10,11 +10,19 @@
  * Worker calls Alpaca.
  *
  * WHAT IT DOES (and doesn't):
- * - Exposes six operations: historical daily bars for a single symbol
+ * - Exposes seven operations: historical daily bars for a single symbol
  *   (/bars), today's top gainers/losers (/movers), today's most active
  *   symbols by volume (/actives), the live SEC Form 4 insider filing feed
  *   (/insider-feed), the House Stock Watcher congressional trade dataset
- *   (/congress-feed), and a live trade/quote WebSocket relay (/stream).
+ *   (/congress-feed), basic company fundamentals for the stock deep-dive
+ *   page (/fundamentals), and a live trade/quote WebSocket relay (/stream).
+ * - /fundamentals proxies Finnhub's free-tier `stock/metric` endpoint
+ *   (EBITDA, market cap, P/E, revenue per share, margins, 52-week range).
+ *   Alpaca's Market Data API doesn't carry fundamentals at all, so this is
+ *   the one route here that isn't Alpaca and isn't SEC/S3 either — it needs
+ *   its own free API key (see FINNHUB_API_KEY below). If that secret isn't
+ *   set, the route returns a clear "not configured" error instead of
+ *   silently failing, same as the Alpaca credential gate.
  * - /stream is backed by a Durable Object (AlpacaStreamRelay, below). Most
  *   Alpaca plans — including free — allow exactly ONE concurrent WebSocket
  *   connection per account. The Durable Object exists so every browser tab
@@ -48,10 +56,17 @@
  *    into this file):
  *      wrangler secret put APCA_API_KEY_ID
  *      wrangler secret put APCA_API_SECRET_KEY
+ * 4b. Optional — enables the fundamentals strip on the stock deep-dive
+ *    page. Get a free key at https://finnhub.io/register (no card needed,
+ *    free tier is plenty for personal use), then:
+ *      wrangler secret put FINNHUB_API_KEY
+ *    Skip this and /fundamentals just returns a "not configured" error —
+ *    nothing else on the site depends on it.
  * 5. Edit ALLOWED_ORIGIN below to match your actual site origin
  *    (e.g. "https://yourusername.github.io"), then redeploy.
  * 6. Copy the workers.dev URL wrangler prints out and paste it into
- *    ALPACA_PROXY_URL near the top of index.html's <script>.
+ *    ALPACA_PROXY_URL near the top of index.html's, fund.html's, and
+ *    stock.html's <script>.
  *
  * NOTE ON /stream: this needs the durable_objects binding and migration
  * already added to wrangler.toml alongside this file. If you're deploying
@@ -112,10 +127,12 @@ export default {
 
     const url = new URL(request.url);
 
-    // These two are public data, no Alpaca credentials involved — check them
-    // before the credential gate below.
+    // These three are public data or use their own separate credential —
+    // check them before the Alpaca credential gate below, so none of them
+    // depend on Alpaca keys being configured.
     if (url.pathname === '/insider-feed') return handleInsiderFeed();
     if (url.pathname === '/congress-feed') return handleCongressFeed();
+    if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
 
     if (!env.APCA_API_KEY_ID || !env.APCA_API_SECRET_KEY) {
       return json({ error: 'Proxy is not configured with Alpaca credentials yet' }, 500);
@@ -126,7 +143,7 @@ export default {
     if (url.pathname === '/actives') return handleActives(url, env);
     if (url.pathname === '/stream') return handleStream(request, env);
 
-    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /congress-feed, and /stream are exposed by this proxy.' }, 404);
+    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /congress-feed, /fundamentals, and /stream are exposed by this proxy.' }, 404);
   },
 };
 
@@ -318,6 +335,54 @@ async function handleCongressFeed() {
 
     const data = await upstream.json();
     return json(data);
+}
+
+// ── GET /fundamentals?symbol=AAPL
+// Basic company fundamentals for the stock deep-dive page — EBITDA, market
+// cap, P/E, revenue per share, margins, 52-week range — via Finnhub's free
+// `stock/metric` endpoint (metric=all). Needs its own key because Alpaca's
+// Market Data API has no fundamentals of any kind. Returns a plain "not
+// configured" error (not a 5xx crash) when FINNHUB_API_KEY isn't set, so
+// the frontend can show a clear explanation instead of a broken chart.
+async function handleFundamentals(url, env) {
+    const symbol = (url.searchParams.get('symbol') || '').toUpperCase().trim();
+    if (!TICKER_RE.test(symbol)) {
+      return json({ error: 'Invalid or missing symbol' }, 400);
+    }
+    if (!env.FINNHUB_API_KEY) {
+      return json({ error: 'not_configured', message: 'Fundamentals need a free Finnhub API key. Get one at finnhub.io/register, then run: wrangler secret put FINNHUB_API_KEY' }, 501);
+    }
+
+    const finnhubUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${env.FINNHUB_API_KEY}`;
+    let upstream;
+    try {
+      upstream = await fetch(finnhubUrl);
+    } catch (err) {
+      return json({ error: 'Upstream fetch failed: ' + err.message }, 502);
+    }
+
+    if (!upstream.ok) {
+      const text = await upstream.text().catch(() => '');
+      return json({ error: `Finnhub returned HTTP ${upstream.status}`, detail: text.slice(0, 300) }, upstream.status);
+    }
+
+    const data = await upstream.json();
+    const m = data.metric || {};
+    // Trimmed down to what the deep-dive page actually shows — Finnhub's
+    // full payload has ~150 fields, most of it noise for this use case.
+    return json({
+      symbol,
+      marketCapM: m.marketCapitalization ?? null,          // millions USD
+      ebitdaM: m.ebitda ?? null,                            // millions USD (may be null for some symbols/tiers)
+      peTTM: m.peTTM ?? null,
+      epsTTM: m.epsTTM ?? null,
+      revenuePerShareTTM: m.revenuePerShareTTM ?? null,
+      grossMarginTTM: m.grossMarginTTM ?? null,
+      netProfitMarginTTM: m.netProfitMarginTTM ?? null,
+      week52High: m['52WeekHigh'] ?? null,
+      week52Low: m['52WeekLow'] ?? null,
+      beta: m.beta ?? null,
+    });
 }
 
 // ══════════════════════════════════════════════════════════════
