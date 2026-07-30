@@ -4,38 +4,39 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Signal Desk — Public Disclosure Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600..900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Obsidian + brass — dark, cool-neutral base with a bullion-gold accent.
-     Variable names kept as-is from the prior theme (--amber/--teal/--rose)
+  /* Graphite + circuit-green + bullion-gold — a dark corporate-tech base
+     modeled on chip-brand keynote decks and private-bank collateral.
+     Variable names kept as-is from the prior theme (--amber/--teal/--rose/--blue/--violet)
      to avoid touching every usage site; the hex values are what changed. */
-  --bg: #08080a;
-  --surface: #121215;
-  --surface2: #1a1a1e;
-  --border: rgba(201,169,97,0.16);
-  --amber: #c9a961;
-  --amber-dim: rgba(201,169,97,0.14);
-  --amber-glow: rgba(201,169,97,0.42);
-  --blue: #2f7dff;
-  --blue-dim: rgba(47,125,255,0.14);
-  --blue-glow: rgba(47,125,255,0.45);
-  --teal: #34d399;
-  --teal-dim: rgba(52,211,153,0.12);
-  --rose: #f0465c;
-  --rose-dim: rgba(240,70,92,0.12);
-  --violet: #a78bfa;
-  --violet-dim: rgba(167,139,250,0.12);
-  --text: #eeece6;
-  --text-dim: rgba(238,236,230,0.62);
-  --text-muted: rgba(238,236,230,0.34);
+  --bg: #060706;
+  --surface: #101211;
+  --surface2: #171a18;
+  --border: rgba(122,230,90,0.16);
+  --amber: #ffc933;
+  --amber-dim: rgba(255,201,51,0.14);
+  --amber-glow: rgba(255,201,51,0.45);
+  --blue: #7ae65a;
+  --blue-dim: rgba(122,230,90,0.14);
+  --blue-glow: rgba(122,230,90,0.45);
+  --teal: #39ff8f;
+  --teal-dim: rgba(57,255,143,0.13);
+  --rose: #ff5c72;
+  --rose-dim: rgba(255,92,114,0.12);
+  --violet: #ffdd6a;
+  --violet-dim: rgba(255,221,106,0.12);
+  --text: #f3f5f2;
+  --text-dim: rgba(243,245,242,0.64);
+  --text-muted: rgba(243,245,242,0.36);
 }
 
-html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; min-height: 100vh; }
+html, body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
-.serif { font-family: 'Fraunces', serif; }
+.serif { font-family: 'Space Grotesk', sans-serif; }
 
 /* ── AMBIENT LIGHT (replaces the old scanline texture) ───────
    A quiet gold + emerald glow from opposite corners, like light off
@@ -43,8 +44,8 @@ html, body { background: var(--bg); color: var(--text); font-family: 'IBM Plex S
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
   background:
-    radial-gradient(ellipse 900px 520px at 12% -8%, rgba(201,169,97,0.10), transparent 62%),
-    radial-gradient(ellipse 700px 480px at 104% 4%, rgba(52,211,153,0.05), transparent 60%);
+    radial-gradient(ellipse 900px 520px at 12% -8%, rgba(255,201,51,0.09), transparent 62%),
+    radial-gradient(ellipse 700px 480px at 104% 4%, rgba(122,230,90,0.09), transparent 60%);
 }
 
 /* ── TICKER TAPE ──────────────────────────────────────────── */
@@ -76,18 +77,19 @@ body::before {
 /* ── HEADER ───────────────────────────────────────────────── */
 header {
   position: sticky; top: 0; z-index: 10;
-  background: rgba(8,8,10,0.88); backdrop-filter: blur(14px);
+  background: rgba(6,7,6,0.86); backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
   padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark {
-  width: 36px; height: 36px; border-radius: 4px;
-  background: var(--amber-dim); border: 1px solid var(--amber-glow); color: var(--amber);
+  width: 36px; height: 36px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--amber) 100%);
+  color: #06110a; box-shadow: 0 0 18px rgba(122,230,90,0.28);
   display: flex; align-items: center; justify-content: center;
 }
-.brand-text { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 700; letter-spacing: 0.2px; }
+.brand-text { font-family: 'Space Grotesk', sans-serif; font-size: 21px; font-weight: 700; letter-spacing: 0.2px; text-transform: uppercase; }
 .brand-sub { font-size: 10.5px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.5px; margin-top: 2px; }
 
 .freshness-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -109,7 +111,7 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px;
   margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
-.hero-title { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 700; line-height: 1.08; letter-spacing: -0.3px; }
+.hero-title { font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 700; line-height: 1.08; letter-spacing: -0.6px; }
 .hero-title span {
   background: linear-gradient(100deg, var(--amber) 20%, var(--blue) 85%);
   -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
@@ -125,11 +127,11 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .tab-btn {
   padding: 10px 18px; border-radius: 4px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text-dim);
-  font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.5px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; font-weight: 600;
   cursor: pointer; transition: all .15s;
 }
 .tab-btn:hover { border-color: var(--blue-glow); color: var(--text); }
-.tab-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.tab-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); box-shadow: 0 0 14px rgba(122,230,90,0.18); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; animation: fadeIn .3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -185,15 +187,45 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 
 /* ── WATCHLIST CARDS (institutions) ───────────────────────── */
 .fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px; }
-.fund-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
-.fund-meta { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
+.fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+.fund-card-rich { grid-column: span 1; }
+.fund-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 2px; letter-spacing: -0.2px; }
+.fund-meta { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 14px; }
 .fund-holdings { display: flex; flex-direction: column; gap: 6px; }
-.fund-holding-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.fund-holding-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .fund-holding-row:last-child { border-bottom: none; }
 .ticker { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
-.fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
+.fund-link { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--teal); text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
 .fund-link:hover { text-decoration: underline; }
+
+/* Per-fund stat strip (value / positions / concentration) */
+.fund-stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.fund-stat { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; }
+.fund-stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 700; color: var(--amber); }
+.fund-stat-label { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
+
+/* Long / bullish-call / bearish-put signal chips */
+.ls-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.ls-chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-family: 'IBM Plex Mono', monospace;
+  padding: 5px 9px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-dim); cursor: help;
+}
+.ls-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.ls-chip.ls-long { border-color: var(--blue-glow); color: var(--blue); }
+.ls-chip.ls-bull { border-color: rgba(255,201,51,0.35); color: var(--amber); }
+.ls-chip.ls-bear { border-color: rgba(255,92,114,0.32); color: var(--rose); }
+
+/* Quarter-over-quarter change badges */
+.chg-badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chg-badge {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.5px; font-weight: 700;
+  padding: 4px 8px; border-radius: 4px; background: var(--surface2);
+}
+.chg-badge.new { color: var(--teal); }
+.chg-badge.closed { color: var(--rose); }
+.chg-badge.up { color: var(--blue); }
+.chg-badge.down { color: var(--amber); }
+.empty-note { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; padding: 8px 0; }
 
 /* ── PRICE CHARTS ─────────────────────────────────────────── */
 .chart-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
@@ -210,12 +242,12 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; transition: all .15s;
 }
 .chart-search button:hover, .range-btn:hover { border-color: var(--blue-glow); color: var(--text); }
-.range-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.range-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
 .chart-range-btns { display: flex; gap: 6px; }
 
 .chart-frame { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
 .chart-header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 12px; }
-.chart-symbol-title { font-family: 'Fraunces', serif; font-size: 23px; font-weight: 700; letter-spacing: 0.1px; }
+.chart-symbol-title { font-family: 'Space Grotesk', sans-serif; font-size: 23px; font-weight: 700; letter-spacing: -0.1px; }
 .chart-price-row { font-family: 'IBM Plex Mono', monospace; font-size: 13px; margin-top: 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .chart-price-row .price-now { font-size: 20px; font-weight: 600; }
 .price-change.up { color: var(--teal); }
@@ -310,7 +342,7 @@ footer a { color: var(--amber); }
   <!-- INSTITUTIONS / 13F -->
   <div class="tab-panel" id="tab-institutions">
     <div id="institutions-body" class="fund-grid">
-      <div class="status-box"><div class="spinner"></div>Loading latest 13F filings for the tracked fund list…</div>
+      <div class="status-box" style="grid-column:1/-1"><div class="spinner"></div>Loading and parsing live 13F filings for the tracked fund list…</div>
     </div>
   </div>
 
@@ -459,6 +491,82 @@ function fmtVol(n) {
   return String(n);
 }
 
+function fmtShares(n) { return Math.round(n).toLocaleString('en-US'); }
+
+// ══════════════════════════════════════════════════════════════
+// 13F FETCH HELPERS — sec.gov/Archives doesn't send CORS headers, so a
+// direct fetch is tried first and a public CORS proxy chain is the
+// fallback. Same approach as fund.html's detail page.
+// ══════════════════════════════════════════════════════════════
+const CORS_PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+];
+
+async function fetchViaProxyChain(targetUrl) {
+  let lastErr = null;
+  for (const buildProxyUrl of CORS_PROXIES) {
+    try {
+      const res = await fetch(buildProxyUrl(targetUrl));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr || new Error('All proxies failed');
+}
+
+async function fetchDirect(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res;
+  } catch (e) {
+    return await fetchViaProxyChain(url);
+  }
+}
+
+// Parses a 13F's information table into equity ("long") rows and options
+// rows. The putCall tag is the only directionality the SEC requires 13F
+// filers to disclose: CALL ≈ a bullish/long-leaning options bet, PUT ≈ a
+// bearish/short-leaning one. A blank putCall tag is a plain long equity
+// share position. True short sales are NOT disclosed on 13F and aren't
+// public data anywhere — this is the closest legitimate public proxy.
+async function fetchInfoTableHoldings(cik, accessionNoDashes) {
+  const cikTrimmed = String(parseInt(cik, 10));
+  const dirUrl = `https://www.sec.gov/Archives/edgar/data/${cikTrimmed}/${accessionNoDashes}/`;
+  const idxRes = await fetchDirect(dirUrl + 'index.json');
+  const idxData = await idxRes.json();
+  const files = idxData.directory?.item || [];
+  const infoTableFile = files.find(f => /info.*table/i.test(f.name) && /\.xml$/i.test(f.name));
+  if (!infoTableFile) throw new Error('No information table found in filing');
+
+  const xmlRes = await fetchDirect(dirUrl + infoTableFile.name);
+  const xmlText = await xmlRes.text();
+  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (xml.querySelector('parsererror')) throw new Error('Information table did not parse as XML');
+
+  const entries = Array.from(xml.getElementsByTagName('infoTable'));
+  const allHoldings = entries.map(entry => {
+    const getTag = name => entry.getElementsByTagName(name)[0]?.textContent?.trim() || '';
+    const rawValue = parseFloat(getTag('value').replace(/,/g, '')) || 0;
+    const shares = parseFloat(getTag('sshPrnamt').replace(/,/g, '')) || 0;
+    const putCall = getTag('putCall').toUpperCase(); // 'PUT' | 'CALL' | ''
+    return { issuer: getTag('nameOfIssuer'), cusip: getTag('cusip'), valueUsd: rawValue, shares, putCall };
+  }).filter(h => h.issuer);
+
+  const equity = allHoldings.filter(h => !h.putCall).sort((a, b) => b.valueUsd - a.valueUsd);
+  const calls = allHoldings.filter(h => h.putCall === 'CALL').sort((a, b) => b.valueUsd - a.valueUsd);
+  const puts = allHoldings.filter(h => h.putCall === 'PUT').sort((a, b) => b.valueUsd - a.valueUsd);
+  const totalValue = allHoldings.reduce((sum, h) => sum + h.valueUsd, 0);
+
+  return {
+    holdings: equity, calls, puts, totalValue,
+    positionCount: allHoldings.length,
+    byCusip: Object.fromEntries(equity.map(h => [h.cusip, h]))
+  };
+}
+
 // ══════════════════════════════════════════════════════════════
 // SOURCE 1 — INSIDER TRADES (SEC Form 4, live feed)
 // ══════════════════════════════════════════════════════════════
@@ -527,46 +635,108 @@ async function loadInsiderTrades() {
 // ══════════════════════════════════════════════════════════════
 // SOURCE 2 — INSTITUTIONAL HOLDINGS (13F, curated watchlist)
 // ══════════════════════════════════════════════════════════════
+function renderChangeBadge(kind, label, count) {
+  return `<span class="chg-badge ${kind}">${label} ${count}</span>`;
+}
+
 async function loadInstitutions() {
   const body = document.getElementById('institutions-body');
-  body.innerHTML = '';
+  body.innerHTML = `
+    <div class="status-box" style="grid-column:1/-1">
+      <div class="spinner"></div>Pulling and parsing each fund's live 13F information table from SEC EDGAR — this fetches and diffs real filings, not cached summaries…
+    </div>`;
   let anySuccess = false;
+  const cards = [];
 
   for (const fund of FUND_WATCHLIST) {
     try {
-      const res = await fetch(`https://data.sec.gov/submissions/CIK${fund.cik}.json`);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const forms = data.filings?.recent;
+      const subRes = await fetchDirect(`https://data.sec.gov/submissions/CIK${fund.cik}.json`);
+      const subData = await subRes.json();
+      const forms = subData.filings?.recent;
       if (!forms) throw new Error('No filing history returned');
 
-      let latest13FIdx = -1;
-      for (let i = 0; i < forms.form.length; i++) {
-        if (forms.form[i].startsWith('13F')) { latest13FIdx = i; break; }
+      const idxs = [];
+      for (let i = 0; i < forms.form.length && idxs.length < 2; i++) {
+        if (forms.form[i].startsWith('13F-HR')) idxs.push(i);
       }
-      if (latest13FIdx === -1) throw new Error('No 13F on file');
+      if (!idxs.length) throw new Error('No 13F-HR on file');
 
-      const accessionNo = forms.accessionNumber[latest13FIdx].replace(/-/g, '');
-      const filingDate = forms.filingDate[latest13FIdx];
+      const latestIdx = idxs[0];
+      const filingDate = forms.filingDate[latestIdx];
+      const latestAcc = forms.accessionNumber[latestIdx].replace(/-/g, '');
       const filingUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${fund.cik}&type=13F&dateb=&owner=include&count=10`;
+      const detailUrl = `fund.html?cik=${encodeURIComponent(fund.cik)}&name=${encodeURIComponent(fund.name)}`;
+
+      const current = await fetchInfoTableHoldings(fund.cik, latestAcc);
+
+      let changeBadges = '';
+      if (idxs.length > 1) {
+        try {
+          const priorAcc = forms.accessionNumber[idxs[1]].replace(/-/g, '');
+          const prior = await fetchInfoTableHoldings(fund.cik, priorAcc);
+          const newCount = current.holdings.filter(h => !prior.byCusip[h.cusip]).length;
+          const closedCount = prior.holdings.filter(h => !current.byCusip[h.cusip]).length;
+          let upCount = 0, downCount = 0;
+          current.holdings.forEach(h => {
+            const p = prior.byCusip[h.cusip];
+            if (p && p.shares !== h.shares) { if (h.shares > p.shares) upCount++; else downCount++; }
+          });
+          changeBadges = `
+            <div class="chg-badge-row">
+              ${renderChangeBadge('new', '+ NEW', newCount)}
+              ${renderChangeBadge('closed', '✕ EXITED', closedCount)}
+              ${renderChangeBadge('up', '▲ ADDED', upCount)}
+              ${renderChangeBadge('down', '▼ TRIMMED', downCount)}
+            </div>`;
+        } catch (e) { /* comparison optional — proceed without it */ }
+      }
+
+      const callValue = current.calls.reduce((s, h) => s + h.valueUsd, 0);
+      const putValue = current.puts.reduce((s, h) => s + h.valueUsd, 0);
+      const longValue = current.holdings.reduce((s, h) => s + h.valueUsd, 0);
+      const top5 = current.holdings.slice(0, 5);
 
       const card = document.createElement('div');
-      card.className = 'fund-card';
+      card.className = 'fund-card fund-card-rich';
       card.innerHTML = `
         <div class="fund-name">${escHtml(fund.name)}</div>
-        <div class="fund-meta">Last 13F filed ${escHtml(filingDate)}</div>
-        <div class="status-box" style="padding:16px;font-size:11px;text-align:left">
-          Position-level holdings require parsing this filing's information table directly.
+        <div class="fund-meta">13F filed ${escHtml(filingDate)} · ${current.positionCount} total positions</div>
+
+        <div class="fund-stat-row">
+          <div class="fund-stat"><div class="fund-stat-value">${fmtMoney(current.totalValue)}</div><div class="fund-stat-label">Reported Value</div></div>
+          <div class="fund-stat"><div class="fund-stat-value">${current.holdings.length}</div><div class="fund-stat-label">Long Positions</div></div>
+          <div class="fund-stat"><div class="fund-stat-value">${longValue ? ((top5.reduce((s,h)=>s+h.valueUsd,0) / longValue) * 100).toFixed(0) + '%' : '—'}</div><div class="fund-stat-label">In Top 5</div></div>
         </div>
-        <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">View full 13F on SEC EDGAR →</a>
+
+        <div class="ls-row" title="Derived from the 13F's putCall field — the only public directionality signal in this filing. True short sales are never disclosed here.">
+          <div class="ls-chip ls-long"><span class="ls-dot"></span>Long equity: ${current.holdings.length} · ${fmtMoney(longValue)}</div>
+          <div class="ls-chip ls-bull">Bullish calls: ${current.calls.length} · ${fmtMoney(callValue)}</div>
+          <div class="ls-chip ls-bear">Bearish puts: ${current.puts.length} · ${fmtMoney(putValue)}</div>
+        </div>
+
+        ${changeBadges}
+
+        <div class="fund-holdings">
+          ${top5.length ? top5.map(h => `
+            <div class="fund-holding-row">
+              <span>${escHtml(h.issuer)}</span>
+              <span class="num mono">${fmtMoney(h.valueUsd)} <span style="color:var(--text-muted)">· ${longValue ? ((h.valueUsd/longValue)*100).toFixed(1) : '0.0'}%</span></span>
+            </div>`).join('') : '<div class="empty-note">No long equity positions reported.</div>'}
+        </div>
+
+        <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">
+          <a class="fund-link" href="${detailUrl}">Full holdings &amp; positioning →</a>
+          <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">Raw 13F on EDGAR →</a>
+        </div>
       `;
-      body.appendChild(card);
+      cards.push(card);
       anySuccess = true;
 
       allSignals.push({
         source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
-        detail: `Filed 13F for the quarter — holdings as of ${filingDate}`, direction: 'neutral',
-        time: filingDate, link: filingUrl, sortValue: new Date(filingDate).getTime()
+        detail: `13F for ${filingDate}: ${current.holdings.length} long positions worth ${fmtMoney(longValue)}${current.puts.length ? `, ${current.puts.length} bearish put position(s)` : ''}`,
+        direction: current.puts.length > current.calls.length ? 'sell' : 'buy',
+        time: filingDate, link: detailUrl, sortValue: new Date(filingDate).getTime()
       });
     } catch (err) {
       const card = document.createElement('div');
@@ -575,9 +745,17 @@ async function loadInstitutions() {
         <div class="fund-name">${escHtml(fund.name)}</div>
         <div class="status-box error" style="padding:12px;font-size:11px">Couldn't load: ${escHtml(err.message)}</div>
       `;
-      body.appendChild(card);
+      cards.push(card);
     }
   }
+
+  body.innerHTML = '';
+  const note = document.createElement('div');
+  note.className = 'status-box';
+  note.style.cssText = 'grid-column:1/-1;text-align:left;padding:14px 18px;font-size:11px';
+  note.innerHTML = 'Holdings and change badges are parsed live from each fund\'s actual 13F information table on SEC EDGAR, diffed against its prior quarterly filing. "Bullish calls" / "bearish puts" are the only long/short-style signal 13F legally requires funds to disclose — true short sales are never made public.';
+  body.appendChild(note);
+  cards.forEach(c => body.appendChild(c));
 
   setFreshness('institution', 'Hedge Funds', anySuccess ? 'live' : 'stale', 'quarterly, up to 45-day lag');
   renderSignals();
