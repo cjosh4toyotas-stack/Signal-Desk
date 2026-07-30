@@ -98,6 +98,11 @@ main { max-width: 1100px; margin: 0 auto; padding: 32px; }
 .ls-chip.ls-bull { border-color: var(--amber-glow); color: var(--amber); }
 .ls-chip.ls-bear { border-color: rgba(255,92,114,0.32); color: var(--rose); }
 
+.badge-pill { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px; padding: 3px 7px; border-radius: 4px; }
+.badge-pill.badge-new { background: rgba(122,230,90,0.14); color: var(--teal); }
+.badge-pill.badge-held { background: var(--surface2); color: var(--text-muted); }
+.ticker-cell { min-width: 56px; }
+
 footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -185,7 +190,7 @@ const OPENFIGI_API_KEY = '';
 
 // See alpaca-proxy-worker.js — a Cloudflare Worker that holds your real Alpaca
 // keys server-side. Replace with your deployed workers.dev URL to enable.
-const ALPACA_PROXY_URL = 'https://YOUR-WORKER-SUBDOMAIN.workers.dev';
+const ALPACA_PROXY_URL = 'https://signal-desk-alpaca-proxy.jahloverules.workers.dev';
 const alpacaProxyConfigured = !!ALPACA_PROXY_URL && !ALPACA_PROXY_URL.includes('YOUR-WORKER-SUBDOMAIN');
 
 // CUSIPs don't change day to day, so cache resolved tickers in localStorage
@@ -293,14 +298,13 @@ function buildSparklineSvg(bars, pctChange) {
   </svg>`;
 }
 
-// Wires up lazy, scroll-driven price loading for the holdings table: rows
-// resolve their ticker and fetch price history only once they scroll near
-// the viewport, so a fund with thousands of positions doesn't fire thousands
-// of requests on page load.
+// Wires up lazy, scroll-driven ticker resolution (and, when the Alpaca
+// proxy is configured, price context) for the positions table: rows resolve
+// their ticker — and become a clickable link into the stock deep-dive page —
+// only once they scroll near the viewport, so a fund with thousands of
+// positions doesn't fire thousands of requests on page load.
 function initPriceContext(filingDateStr) {
-  if (!alpacaProxyConfigured) return;
   const filingISO = toISODate(filingDateStr);
-  if (!filingISO) return;
 
   const rows = document.querySelectorAll('tr[data-cusip]');
   const observer = new IntersectionObserver((entries) => {
@@ -309,10 +313,18 @@ function initPriceContext(filingDateStr) {
       observer.unobserve(entry.target);
       const row = entry.target;
       const cusip = row.dataset.cusip;
+      const issuer = row.dataset.issuer || '';
+      const tickerCell = row.querySelector('.ticker-cell');
       const sparkCell = row.querySelector('.spark-cell');
       const chgCell = row.querySelector('.chg-cell');
 
       resolveCusipToTicker(cusip).then(ticker => {
+        if (tickerCell) {
+          tickerCell.innerHTML = ticker
+            ? `<a class="ticker" href="stock.html?symbol=${encodeURIComponent(ticker)}&issuer=${encodeURIComponent(issuer)}">${escHtml(ticker)}</a>`
+            : '<span style="color:var(--text-muted)">—</span>';
+        }
+        if (!alpacaProxyConfigured || !filingISO) return;
         if (!ticker) { if (chgCell) chgCell.textContent = '—'; return; }
         return fetchBarsSince(ticker, filingISO).then(bars => {
           if (!bars) { if (chgCell) chgCell.textContent = '—'; return; }
@@ -461,26 +473,68 @@ async function loadFundDetail() {
       html += `<div class="empty-note">No prior 13F-HR filing found for this fund — quarter-over-quarter comparison isn't available yet, but the full current holdings are below.</div>`;
     }
 
-    html += `<div class="section-title">All Holdings <span class="section-count">${current.holdings.length} positions, sorted by value${alpacaProxyConfigured ? ' <span class="price-source-note">· price context via Alpaca, tickers via OpenFIGI</span>' : ''}</span></div>`;
+    // Unified table — every disclosed position (long equity + bullish calls +
+    // bearish puts), tagged with direction, size, and how it compares to the
+    // prior filing. "Placed" dates are inherently quarter-grained: 13F only
+    // discloses quarter-end snapshots, never the actual trade date, so a
+    // position is labeled NEW (first appears this filing) or HELD (already
+    // present last filing too) rather than a fabricated exact date.
+    const tagged = arr => arr.map(h => ({ ...h }));
+    const allCurrent = [
+      ...tagged(current.holdings).map(h => ({ ...h, direction: 'LONG' })),
+      ...tagged(current.calls).map(h => ({ ...h, direction: 'CALL' })),
+      ...tagged(current.puts).map(h => ({ ...h, direction: 'PUT' })),
+    ].sort((a, b) => b.valueUsd - a.valueUsd);
+
+    const priorByKey = {};
+    if (prior) {
+      [
+        ...prior.holdings.map(h => ({ ...h, direction: 'LONG' })),
+        ...prior.calls.map(h => ({ ...h, direction: 'CALL' })),
+        ...prior.puts.map(h => ({ ...h, direction: 'PUT' })),
+      ].forEach(h => { priorByKey[h.cusip + '|' + h.direction] = h; });
+    }
+
+    const dirLabel = { LONG: 'LONG', CALL: 'BULLISH CALL', PUT: 'BEARISH PUT' };
+    const dirClass = { LONG: 'ls-long', CALL: 'ls-bull', PUT: 'ls-bear' };
+    const grandTotal = current.totalValue + callValue + putValue;
+
+    html += `<div class="section-title">All Positions <span class="section-count">${allCurrent.length} total — long, bullish &amp; bearish${alpacaProxyConfigured ? ' <span class="price-source-note">· price context via Alpaca, tickers via OpenFIGI</span>' : ''}</span></div>`;
     html += `
       <table class="data-table">
         <thead><tr>
-          <th>Issuer</th><th>Shares</th><th>Value</th><th>% of Portfolio</th>
+          <th>Ticker</th><th>Issuer</th><th>Direction</th><th>Shares</th><th>Value</th><th>% of Book</th><th>Status</th><th>Snapshot</th>
           ${alpacaProxyConfigured ? '<th>Chart</th><th title="Price change from filing date to today">Since Filing</th>' : ''}
         </tr></thead>
         <tbody>
-          ${current.holdings.map(h => `
-            <tr data-cusip="${escHtml(h.cusip)}">
+          ${allCurrent.map(h => {
+            const key = h.cusip + '|' + h.direction;
+            const priorMatch = prior ? priorByKey[key] : undefined;
+            const isNew = prior ? !priorMatch : null;
+            const statusHtml = isNew === null
+              ? `<span class="empty-note" style="padding:0">no prior filing</span>`
+              : isNew
+                ? `<span class="badge-pill badge-new">NEW</span>`
+                : `<span class="badge-pill badge-held">HELD</span>`;
+            const snapshotHtml = isNew === false
+              ? `${escHtml(latestDate)}<br><span style="color:var(--text-muted)">held since ≥ ${escHtml(priorDate)}</span>`
+              : escHtml(latestDate);
+            return `
+            <tr data-cusip="${escHtml(h.cusip)}" data-issuer="${escHtml(h.issuer)}">
+              <td class="ticker-cell mono">···</td>
               <td>${escHtml(h.issuer)}</td>
+              <td><span class="ls-chip ${dirClass[h.direction]}" style="padding:3px 8px;font-size:10px">${dirLabel[h.direction]}</span></td>
               <td class="num">${fmtShares(h.shares)}</td>
               <td class="num ticker">${fmtMoney(h.valueUsd)}</td>
-              <td class="num">${current.totalValue ? ((h.valueUsd / current.totalValue) * 100).toFixed(1) + '%' : '—'}</td>
+              <td class="num">${grandTotal ? ((h.valueUsd / grandTotal) * 100).toFixed(1) + '%' : '—'}</td>
+              <td>${statusHtml}</td>
+              <td class="mono" style="font-size:11px;color:var(--text-dim)">${snapshotHtml}</td>
               ${alpacaProxyConfigured ? `
                 <td><div class="spark-cell"></div></td>
                 <td class="num mono chg-cell price-pulse">…</td>
               ` : ''}
             </tr>
-          `).join('')}
+          `;}).join('')}
         </tbody>
       </table>
     `;
