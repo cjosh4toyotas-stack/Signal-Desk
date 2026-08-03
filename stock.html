@@ -219,6 +219,9 @@ function ymd(d) { return d.toISOString().slice(0, 10); }
 // public proxy chain. Same pattern as index.html / fund.html.
 // ══════════════════════════════════════════════════════════════
 const CORS_PROXIES = [
+  // Own Worker first — reliable, proper SEC User-Agent. Free public proxies
+  // are fallback only.
+  url => `${ALPACA_PROXY_URL}/sec-proxy?url=${encodeURIComponent(url)}`,
   url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
   url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
   url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
