@@ -326,6 +326,7 @@ footer a { color: var(--amber); }
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">Top Signals</button>
+    <button class="tab-btn" data-tab="watch13d" onclick="switchTab('watch13d')">13D Watch</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
     <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
     <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
@@ -338,6 +339,21 @@ footer a { color: var(--amber); }
   <div class="tab-panel active" id="tab-signals">
     <div id="signals-body" class="signal-list">
       <div class="status-box"><div class="spinner"></div>Gathering signals across all three sources…</div>
+    </div>
+  </div>
+
+  <!-- 13D WATCH -->
+  <div class="tab-panel" id="tab-watch13d">
+    <div class="chart-controls">
+      <div class="chart-range-btns">
+        <button class="range-btn active" data-sched13="D" onclick="setSched13Filter('D')">13D (activist)</button>
+        <button class="range-btn" data-sched13="NEW" onclick="setSched13Filter('NEW')">New stakes only</button>
+        <button class="range-btn" data-sched13="G" onclick="setSched13Filter('G')">13G (passive)</button>
+        <button class="range-btn" data-sched13="ALL" onclick="setSched13Filter('ALL')">All</button>
+      </div>
+    </div>
+    <div id="watch13d-body">
+      <div class="status-box"><div class="spinner"></div>Fetching the live Schedule 13D/13G feed from SEC EDGAR…</div>
     </div>
   </div>
 
@@ -781,7 +797,7 @@ function renderInsiderTable(progress) {
     <table class="data-table">
       <thead><tr><th>Filed</th><th>Ticker</th><th>Company</th><th>Insider</th><th>Role</th><th>Shares</th><th>Avg Price</th><th>Value</th><th></th></tr></thead>
       <tbody>
-        ${rows.map(r => `
+        ${rows.map((r, i) => `
           <tr>
             <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
             <td>${tickerLink(r.symbol, r.issuerName)}</td>
@@ -791,7 +807,12 @@ function renderInsiderTable(progress) {
             <td class="num">${fmtShares(r.shares)}</td>
             <td class="num">${r.avgPrice ? '$' + r.avgPrice.toFixed(2) : '—'}</td>
             <td class="num" style="color:var(--teal);font-weight:600">${r.value ? fmtMoney(r.value) : '—'}</td>
-            <td style="white-space:nowrap"><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a>${r.count > 1 ? ` <span class="mono" style="color:var(--text-muted);font-size:10px" title="This trade was reported in ${r.count} separate Form 4s by joint filers">×${r.count}</span>` : ''}</td>
+            <td style="white-space:nowrap">${r.count > 1 ? `
+              <button class="chart-jump-btn" data-closed-label="×${r.count} filings ▾" title="This trade was reported in ${r.count} separate Form 4s by joint filers — expand to see each one" onclick="toggleSigFilings('ins-filings-${i}', this)">×${r.count} filings ▾</button>
+              <div id="ins-filings-${i}" style="display:none;margin-top:6px">
+                ${r.links.map((l, j) => `<a class="fund-link" style="display:block;margin-top:3px" href="${escHtml(l)}" target="_blank" rel="noopener">Filing ${j + 1} →</a>`).join('')}
+              </div>`
+              : `<a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a>`}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : (progress.done
@@ -1236,22 +1257,49 @@ function toggleSigFilings(id, btn) {
   btn.textContent = isOpen ? btn.dataset.closedLabel : 'hide filings ▴';
 }
 
+// Freshness-weighted ranking: score = dollar value × 2^(-age/half-life).
+// Pure value ranking let quarter-old 13F stakes squat on top of the board
+// forever; the decay makes a $5M insider buy from yesterday outrank a $2B
+// position change filed months ago, while a freshly filed 13F wave still
+// tops everything for weeks. Anything older than MAX_AGE days drops off.
+const SIGNAL_HALF_LIFE_DAYS = 7;
+const SIGNAL_MAX_AGE_DAYS = 90;
+
+function signalAgeDays(s) {
+  if (!s.time) return SIGNAL_MAX_AGE_DAYS; // undated → treat as stale
+  const ms = Date.now() - new Date(s.time).getTime();
+  return Math.max(0, ms / 86400e3);
+}
+
+function fmtAge(days) {
+  if (days < 1) return 'today';
+  if (days < 2) return 'yesterday';
+  if (days < 60) return Math.round(days) + 'd ago';
+  return Math.round(days / 30) + 'mo ago';
+}
+
 function renderSignals() {
   const body = document.getElementById('signals-body');
   // The same trade filed by N joint filers is one signal, not N — group
   // identical entries first (value is NOT summed: it's one transaction),
-  // then rank. The collapsed row expands to every underlying filing.
+  // then rank by freshness-weighted size. The collapsed row expands to
+  // every underlying filing.
   const ranked = groupDuplicateFilings(
     allSignals.filter(s => (s.valueUsd || 0) > 0),
     s => `${s.source}|${s.tag}|${s.entity}|${s.detail}`
-  ).sort((a, b) => b.valueUsd - a.valueUsd).slice(0, 25);
+  )
+    .map(s => ({ ...s, ageDays: signalAgeDays(s) }))
+    .filter(s => s.ageDays <= SIGNAL_MAX_AGE_DAYS)
+    .map(s => ({ ...s, score: s.valueUsd * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 25);
   if (!ranked.length) {
     body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
     return;
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Largest disclosed transactions, ranked by dollar value — hedge-fund stake changes diffed from live 13F filings, open-market insider buys and sells (equity grants, RSU vesting and other compensation are excluded), and congressional trades of $250K+. When joint filers report the same trade multiple times, it's shown once — expand "filed ×N" to see every filing.
+      Largest disclosed transactions, ranked by dollar value <em>weighted by freshness</em> — recent trades rise, old ones fade, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Sources: hedge-fund stake changes diffed from live 13F filings (quarterly by law, so they dominate for weeks after each filing season then decay), open-market insider buys and sells (grants, RSU vesting and other compensation excluded), and congressional trades of $250K+. Duplicate joint filings are shown once — expand "filed ×N" to see each one.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
@@ -1269,7 +1317,7 @@ function renderSignals() {
       </div>
       <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
       ${s.ticker ? `<button class="chart-jump-btn" title="View price chart for ${escHtml(s.ticker)}" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>` : '<span></span>'}
-      <div class="signal-meta"><span style="color:var(--amber);font-weight:700;font-size:13px">${fmtMoney(s.valueUsd)}</span><br>${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
+      <div class="signal-meta"><span style="color:var(--amber);font-weight:700;font-size:13px">${fmtMoney(s.valueUsd)}</span><br><span style="color:${s.ageDays < 3 ? 'var(--teal)' : 'var(--text-muted)'}">${fmtAge(s.ageDays)}</span> · ${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
     </div>`).join('')}
   `;
 }
