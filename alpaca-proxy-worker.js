@@ -130,7 +130,9 @@ export default {
     // These three are public data or use their own separate credential —
     // check them before the Alpaca credential gate below, so none of them
     // depend on Alpaca keys being configured.
-    if (url.pathname === '/insider-feed') return handleInsiderFeed();
+    if (url.pathname === '/insider-feed') return handleInsiderFeed(url);
+    if (url.pathname === '/form4-batch') return handleForm4Batch(url);
+    if (url.pathname === '/sec-proxy') return handleSecProxy(url);
     if (url.pathname === '/congress-feed') return handleCongressFeed();
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
 
@@ -143,7 +145,7 @@ export default {
     if (url.pathname === '/actives') return handleActives(url, env);
     if (url.pathname === '/stream') return handleStream(request, env);
 
-    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /congress-feed, /fundamentals, and /stream are exposed by this proxy.' }, 404);
+    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /sec-proxy, /congress-feed, /fundamentals, and /stream are exposed by this proxy.' }, 404);
   },
 };
 
@@ -283,14 +285,20 @@ async function handleActives(url, env) {
     return json({ most_actives: data.most_actives || [] });
 }
 
-// ── GET /insider-feed
+// ── GET /insider-feed?start=0
 // The live SEC Form 4 atom feed, market-wide. Passed through as raw XML —
 // the frontend already knows how to parse this exact atom format, only the
 // URL changes. Proxied because www.sec.gov's legacy endpoints don't
 // reliably send CORS headers, and because SEC requires a real User-Agent
 // that browser JS is never allowed to set.
-async function handleInsiderFeed() {
-    const feedUrl = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
+// `start` lets the frontend page BACKWARD through the feed (100 entries per
+// page) so it can cover a full 24-hour window instead of just the newest
+// 100 filings.
+async function handleInsiderFeed(url) {
+    let start = parseInt(url.searchParams.get('start') || '0', 10);
+    if (!Number.isFinite(start) || start < 0) start = 0;
+    start = Math.min(2000, start);
+    const feedUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&start=${start}&output=atom`;
 
     let upstream;
     try {
@@ -311,6 +319,90 @@ async function handleInsiderFeed() {
 
     const text = await upstream.text();
     return xml(text);
+}
+
+// ── GET /form4-batch?ids=CIK-ACCESSION,CIK-ACCESSION,...
+// The atom feed only says "a Form 4 was filed" — the actual transaction
+// (buy or sell, how many shares, at what price) lives inside each filing's
+// ownershipDocument XML. This route fetches a batch of filings' complete
+// submission text files from EDGAR and returns just the extracted XML for
+// each, so the frontend can parse real transactions without making hundreds
+// of cross-origin SEC requests itself.
+// Each id is `cik-accession` where accession is the 18-digit accession
+// number with dashes removed (both are parsed out of the atom feed's entry
+// links by the frontend). Batches are capped so one call stays comfortably
+// inside Workers' subrequest limit.
+const FORM4_ID_RE = /^\d{1,10}-\d{18}$/;
+
+async function handleForm4Batch(url) {
+    const ids = (url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!ids.length) return json({ error: 'ids required: comma-separated cik-accession pairs (accession as 18 digits, no dashes)' }, 400);
+    if (ids.length > 20) return json({ error: 'Max 20 ids per batch' }, 400);
+    for (const id of ids) {
+      if (!FORM4_ID_RE.test(id)) return json({ error: 'Bad id: ' + id }, 400);
+    }
+
+    const results = await Promise.all(ids.map(async id => {
+      const dash = id.indexOf('-');
+      const cik = id.slice(0, dash);
+      const acc = id.slice(dash + 1);
+      const accDashed = `${acc.slice(0, 10)}-${acc.slice(10, 12)}-${acc.slice(12)}`;
+      // The full-submission .txt contains every document in the filing,
+      // including the ownershipDocument XML — one fetch per filing, no
+      // directory listing needed.
+      const txtUrl = `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${acc}/${accDashed}.txt`;
+      try {
+        const res = await fetch(txtUrl, { headers: { 'User-Agent': SEC_USER_AGENT } });
+        if (!res.ok) return { id, error: 'HTTP ' + res.status };
+        const text = await res.text();
+        const startIdx = text.indexOf('<ownershipDocument');
+        const endIdx = text.indexOf('</ownershipDocument>');
+        if (startIdx === -1 || endIdx === -1) return { id, error: 'No ownershipDocument in filing' };
+        return { id, xml: text.slice(startIdx, endIdx + '</ownershipDocument>'.length) };
+      } catch (err) {
+        return { id, error: err.message };
+      }
+    }));
+
+    return json({ results });
+}
+
+// ── GET /sec-proxy?url=https://www.sec.gov/Archives/...
+// General-purpose proxy for SEC EDGAR fetches (13F submission histories,
+// filing directories, information-table XML). The frontend previously
+// leaned on free public CORS proxies (allorigins, corsproxy.io, codetabs)
+// for these because sec.gov/Archives sends no CORS headers — those free
+// services are rate-limited and flaky, which is exactly why fund cards
+// randomly failed to load. Routing through here is reliable, sends SEC the
+// proper User-Agent, and keeps the public proxies as a fallback only.
+// Strictly allowlisted to SEC hosts so this can't be used as an open proxy.
+const SEC_PROXY_ALLOWED = [
+  'https://www.sec.gov/Archives/',
+  'https://www.sec.gov/cgi-bin/browse-edgar',
+  'https://data.sec.gov/',
+];
+
+async function handleSecProxy(url) {
+    const target = url.searchParams.get('url') || '';
+    if (!SEC_PROXY_ALLOWED.some(prefix => target.startsWith(prefix))) {
+      return json({ error: 'Only SEC EDGAR URLs (www.sec.gov/Archives, browse-edgar, data.sec.gov) can be proxied' }, 400);
+    }
+
+    let upstream;
+    try {
+      upstream = await fetch(target, { headers: { 'User-Agent': SEC_USER_AGENT } });
+    } catch (err) {
+      return json({ error: 'Upstream fetch failed: ' + err.message }, 502);
+    }
+
+    const body = await upstream.arrayBuffer();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+        ...corsHeaders(),
+      },
+    });
 }
 
 // ── GET /congress-feed
