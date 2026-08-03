@@ -255,7 +255,12 @@ const OPENFIGI_URL = 'https://api.openfigi.com/v3/mapping';
 const OPENFIGI_API_KEY = '';
 const TICKER_CACHE_KEY = 'sd_cusip_ticker_cache_v1';
 let tickerCache = {};
-try { tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}'); } catch (e) { tickerCache = {}; }
+try {
+  tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}');
+  // Self-heal: earlier versions cached FAILED lookups (OpenFIGI rate limits)
+  // as permanent "no ticker" answers. Drop nulls so they resolve fresh.
+  for (const k of Object.keys(tickerCache)) { if (!tickerCache[k]) delete tickerCache[k]; }
+} catch (e) { tickerCache = {}; }
 function saveTickerCache() {
   try { localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(tickerCache)); } catch (e) { /* non-fatal */ }
 }
@@ -280,8 +285,11 @@ async function resolveCusipBatch(cusips) {
         tickerCache[cusip] = ticker;
       });
     } catch (err) {
-      batch.forEach(cusip => { tickerCache[cusip] = tickerCache[cusip] ?? null; });
+      // Rate-limited or network failure — leave these CUSIPs uncached so a
+      // later call (or the next page load) retries, and back off briefly.
+      await new Promise(r => setTimeout(r, 10000));
     }
+    if (i + 10 < uncached.length) await new Promise(r => setTimeout(r, 2500)); // stay under 25 req/min
   }
   saveTickerCache();
 }
