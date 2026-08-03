@@ -346,6 +346,7 @@ footer a { color: var(--amber); }
   <div class="tab-panel" id="tab-watch13d">
     <div class="chart-controls">
       <div class="chart-range-btns">
+        <button class="range-btn" data-sched13="OPP" onclick="setSched13Filter('OPP')">★ Opportunities</button>
         <button class="range-btn active" data-sched13="D" onclick="setSched13Filter('D')">13D (activist)</button>
         <button class="range-btn" data-sched13="NEW" onclick="setSched13Filter('NEW')">New stakes only</button>
         <button class="range-btn" data-sched13="G" onclick="setSched13Filter('G')">13G (passive)</button>
@@ -1255,6 +1256,45 @@ const SCHED13_FEED = type =>
 let sched13Filings = [];
 let sched13Filter = 'D';
 
+// Known activist / high-conviction filers. A 13D from one of these names is
+// a fundamentally different event than one from a company founder or family
+// trust (which is what most raw 13D filings are). Matched as lowercase
+// substrings against the "Filed by" names.
+const ACTIVIST_ROSTER = [
+  'elliott', 'starboard', 'icahn', 'trian', 'valueact', 'pershing square',
+  'third point', 'jana partners', 'ancora', 'engaged capital', 'sarissa',
+  'sachem head', 'corvex', 'land & buildings', 'legion partners', 'politan',
+  'browning west', 'engine capital', 'barington', 'irenic', 'impactive',
+  'blackwells', 'soros', 'appaloosa', 'baupost', 'duquesne', 'berkshire'
+];
+
+function sched13Activist(rec) {
+  const names = rec.filers.join(' | ').toLowerCase();
+  return ACTIVIST_ROSTER.find(a => names.includes(a)) || null;
+}
+
+// Opportunity tier — what actually predicts an actionable event, per the
+// activist-campaign literature: a brand-new 13D from a known activist is
+// the classic setup (tier 3); any new 13D or an amendment from a known
+// activist is worth a look (tier 2); other 13D amendments are context
+// (tier 1); 13Gs are passive (tier 0).
+function sched13Tier(rec) {
+  const isNewD = rec.form === 'SCHEDULE 13D';
+  const isD = rec.form.startsWith('SCHEDULE 13D');
+  if (isNewD && rec.activist) return 3;
+  if (isNewD || (isD && rec.activist)) return 2;
+  return isD ? 1 : 0;
+}
+
+// If the filer is one of the funds tracked on the Hedge Funds tab, link
+// straight to their full 13F book — the 13D says what they just did, the
+// 13F shows everything else they hold.
+function sched13FundLink(rec) {
+  const names = rec.filers.join(' | ').toLowerCase();
+  const fund = FUND_WATCHLIST.find(f => names.includes(f.name.replace(/\s*\(.*?\)$/, '').toLowerCase()));
+  return fund ? `fund.html?cik=${encodeURIComponent(fund.cik)}&name=${encodeURIComponent(fund.name)}` : null;
+}
+
 function setSched13Filter(f) {
   sched13Filter = f;
   document.querySelectorAll('[data-sched13]').forEach(b => b.classList.toggle('active', b.dataset.sched13 === f));
@@ -1297,6 +1337,7 @@ async function loadSchedule13() {
     }
     if (!anyFeed) throw new Error('Neither 13D nor 13G feed was reachable');
     sched13Filings = [...byAcc.values()].sort((a, b) => new Date(b.filed) - new Date(a.filed));
+    sched13Filings.forEach(r => { r.activist = sched13Activist(r); r.tier = sched13Tier(r); });
     if (!sched13Filings.length) throw new Error('No 13D/13G filings returned');
     setFreshness('sched13', '13D/G', 'live', 'filed within days of the trade');
     renderSched13();
@@ -1320,31 +1361,70 @@ function sched13Badge(form) {
 function renderSched13() {
   const body = document.getElementById('watch13d-body');
   if (!sched13Filings.length) return;
-  const rows = sched13Filings.filter(r =>
-    sched13Filter === 'ALL' ? true
-    : sched13Filter === 'NEW' ? r.form === 'SCHEDULE 13D'
-    : r.form.startsWith('SCHEDULE 13' + sched13Filter));
+  const rows = sched13Filter === 'OPP'
+    ? [...sched13Filings].filter(r => r.tier >= 2).sort((a, b) => b.tier - a.tier || new Date(b.filed) - new Date(a.filed))
+    : sched13Filings.filter(r =>
+        sched13Filter === 'ALL' ? true
+        : sched13Filter === 'NEW' ? r.form === 'SCHEDULE 13D'
+        : r.form.startsWith('SCHEDULE 13' + sched13Filter));
   body.innerHTML = `
     <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
       Live <strong>Schedule 13D / 13G</strong> filings — the disclosure required within days of any investor crossing 5% ownership of a public company.
-      A <strong>NEW 13D</strong> is the classic activist opening move: a 5%+ stake with declared intent to influence the company. <strong>13D AMEND</strong> means an existing activist changed their position or intentions. 13G filings are the same threshold with passive intent.
-      This is the fastest large-stake disclosure that exists in public data — days of lag, versus up to 135 for a 13F.
+      A <strong>NEW 13D</strong> is the classic activist opening move; <strong>13D AMEND</strong> means an existing holder changed their position or intentions; 13G is the same threshold with passive intent.
+      Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong> — most other raw 13D filings are founders and family holders, not campaigns. "★ Opportunities" shows only those. Stake % is parsed from each filing as it loads. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
     </div>
     ${rows.length ? `
     <table class="data-table">
-      <thead><tr><th>Filed</th><th>Type</th><th>Target Company</th><th>Filed By</th><th></th></tr></thead>
+      <thead><tr><th>Filed</th><th>Type</th><th>Target Company</th><th>Filed By</th><th>Stake</th><th></th></tr></thead>
       <tbody>
         ${rows.map(r => `
-          <tr>
+          <tr${r.tier >= 2 ? ' style="background:rgba(57,255,143,0.05)"' : ''}>
             <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
-            <td>${sched13Badge(r.form)}</td>
+            <td style="white-space:nowrap">${sched13Badge(r.form)}${r.activist ? ` <span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)" title="Filer matches the known-activist roster">★ ${escHtml(r.activist.toUpperCase())}</span>` : ''}</td>
             <td style="font-weight:600">${escHtml(r.subject || '—')}</td>
             <td style="color:var(--text-dim)">${escHtml(r.filers.join(', ') || '—')}</td>
-            <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a></td>
+            <td class="num mono" id="s13pct-${r.acc}" style="color:var(--amber)">${r.form.startsWith('SCHEDULE 13D') ? '…' : '—'}</td>
+            <td style="white-space:nowrap"><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a>${sched13FundLink(r) ? ` <a href="${sched13FundLink(r)}" class="fund-link" title="This filer is on your Hedge Funds tab — see their full quarterly book">13F book →</a>` : ''}</td>
           </tr>`).join('')}
       </tbody>
-    </table>` : '<div class="status-box">No filings match this filter in the current feed window — try "All".</div>'}
+    </table>` : '<div class="status-box">No filings match this filter in the current feed window — the ★ view can be empty on quiet days, since known-activist 13Ds are rare events. Try "13D (activist)" or "All".</div>'}
   `;
+  enrichSched13Percents(rows);
+}
+
+// Lazily pull each displayed 13D filing and extract the disclosed ownership
+// percentage. New-style 13D/G filings are structured XML inside the full
+// submission text, so a tolerant scan for percent-of-class fields works;
+// a prose fallback covers older formats. Cached per accession, capped per
+// render to stay polite to SEC.
+const sched13PctCache = {};
+async function enrichSched13Percents(rows) {
+  const targets = rows.filter(r => r.form.startsWith('SCHEDULE 13D')).slice(0, 20);
+  for (const r of targets) {
+    const cell = document.getElementById('s13pct-' + r.acc);
+    if (!cell) continue;
+    if (r.acc in sched13PctCache) { cell.textContent = sched13PctCache[r.acc] || '—'; continue; }
+    const m = r.link.match(/\/data\/(\d+)\/(\d{18})\//);
+    if (!m) { cell.textContent = '—'; continue; }
+    const dashed = `${m[2].slice(0, 10)}-${m[2].slice(10, 12)}-${m[2].slice(12)}`;
+    try {
+      const res = await fetchDirect(`https://www.sec.gov/Archives/edgar/data/${parseInt(m[1], 10)}/${m[2]}/${dashed}.txt`);
+      const text = await res.text();
+      let pct = null;
+      const tagHits = [...text.matchAll(/<[^>/]*[Pp]ercent[^>]*>\s*([\d.]+)/g)]
+        .map(x => parseFloat(x[1])).filter(v => v > 0 && v <= 100);
+      if (tagHits.length) pct = Math.max(...tagHits);
+      if (pct === null) {
+        const pm = text.match(/[Pp]ercent of class[\s\S]{0,300}?([\d.]+)\s*%/);
+        if (pm) pct = parseFloat(pm[1]);
+      }
+      sched13PctCache[r.acc] = pct != null ? pct.toFixed(1) + '%' : null;
+    } catch (e) {
+      sched13PctCache[r.acc] = null;
+    }
+    const c = document.getElementById('s13pct-' + r.acc);
+    if (c) c.textContent = sched13PctCache[r.acc] || '—';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
