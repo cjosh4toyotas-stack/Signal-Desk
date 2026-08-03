@@ -1240,6 +1240,114 @@ async function loadCongressTrades() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// SOURCE 5 — 13D/13G WATCH (activist stakes, days-not-months lag)
+// ══════════════════════════════════════════════════════════════
+// Schedule 13D must be filed within days of crossing 5% ownership of a
+// company WITH intent to influence control — it's the loudest activist
+// signal in public data, and the same filing a Bloomberg terminal alerts
+// on. Schedule 13G is the same 5% threshold but passive intent (index
+// funds, big institutions). Amendments (/A) are position changes to an
+// existing stake. Unlike 13Fs (quarterly, 45-day lag), this is
+// near-real-time — which is exactly why this tab exists.
+const SCHED13_FEED = type =>
+  `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=${encodeURIComponent(type)}&company=&dateb=&owner=include&count=100&output=atom`;
+
+let sched13Filings = [];
+let sched13Filter = 'D';
+
+function setSched13Filter(f) {
+  sched13Filter = f;
+  document.querySelectorAll('[data-sched13]').forEach(b => b.classList.toggle('active', b.dataset.sched13 === f));
+  renderSched13();
+}
+
+async function loadSchedule13() {
+  const body = document.getElementById('watch13d-body');
+  try {
+    const byAcc = new Map();
+    let anyFeed = false;
+    for (const type of ['SCHEDULE 13D', 'SCHEDULE 13G']) {
+      try {
+        const res = await fetchDirect(SCHED13_FEED(type));
+        const text = await res.text();
+        const xml = new DOMParser().parseFromString(text, 'application/xml');
+        if (xml.querySelector('parsererror')) throw new Error('feed parse error');
+        anyFeed = true;
+        for (const e of Array.from(xml.querySelectorAll('entry'))) {
+          const title = e.querySelector('title')?.textContent || '';
+          const updated = e.querySelector('updated')?.textContent || '';
+          const link = e.querySelector('link')?.getAttribute('href') || '';
+          const m = link.match(/\/data\/(\d+)\/(\d{18})\//);
+          if (!m) continue;
+          const acc = m[2];
+          // Titles look like: "SCHEDULE 13D/A - ACME CORP (0001234567) (Subject)"
+          // Each filing appears twice — once for the subject company, once
+          // for the filer — so entries are merged by accession number.
+          const tm = title.match(/^(.*?)\s+-\s+(.*?)\s+\((\d{5,10})\)\s+\((Subject|Filed by)\)/i);
+          const form = (tm ? tm[1] : title.split(' - ')[0] || '').trim().toUpperCase();
+          const name = tm ? tm[2].trim() : title.trim();
+          const role = tm ? tm[4] : '';
+          const rec = byAcc.get(acc) || { acc, form, filed: updated, link, subject: '', filers: [] };
+          if (/subject/i.test(role)) rec.subject = name;
+          else if (name && !rec.filers.includes(name)) rec.filers.push(name);
+          if (form) rec.form = form;
+          byAcc.set(acc, rec);
+        }
+      } catch (e) { /* one feed failing shouldn't kill the other */ }
+    }
+    if (!anyFeed) throw new Error('Neither 13D nor 13G feed was reachable');
+    sched13Filings = [...byAcc.values()].sort((a, b) => new Date(b.filed) - new Date(a.filed));
+    if (!sched13Filings.length) throw new Error('No 13D/13G filings returned');
+    setFreshness('sched13', '13D/G', 'live', 'filed within days of the trade');
+    renderSched13();
+  } catch (err) {
+    setFreshness('sched13', '13D/G', 'stale', 'unreachable');
+    body.innerHTML = `
+      <div class="status-box error">
+        Couldn't load the Schedule 13D/13G feed (${escHtml(err.message)}).<br>
+        This tab needs the Worker deployed with the <code>/sec-proxy</code> route — if you haven't redeployed since that route was added, run <code>npx wrangler deploy</code> and reload.
+      </div>`;
+  }
+}
+
+function sched13Badge(form) {
+  if (form === 'SCHEDULE 13D') return '<span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)">NEW 13D</span>';
+  if (form.startsWith('SCHEDULE 13D')) return '<span class="badge-pill" style="background:var(--amber-dim);color:var(--amber)">13D AMEND</span>';
+  if (form === 'SCHEDULE 13G') return '<span class="badge-pill badge-held">NEW 13G</span>';
+  return '<span class="badge-pill badge-held">13G AMEND</span>';
+}
+
+function renderSched13() {
+  const body = document.getElementById('watch13d-body');
+  if (!sched13Filings.length) return;
+  const rows = sched13Filings.filter(r =>
+    sched13Filter === 'ALL' ? true
+    : sched13Filter === 'NEW' ? r.form === 'SCHEDULE 13D'
+    : r.form.startsWith('SCHEDULE 13' + sched13Filter));
+  body.innerHTML = `
+    <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+      Live <strong>Schedule 13D / 13G</strong> filings — the disclosure required within days of any investor crossing 5% ownership of a public company.
+      A <strong>NEW 13D</strong> is the classic activist opening move: a 5%+ stake with declared intent to influence the company. <strong>13D AMEND</strong> means an existing activist changed their position or intentions. 13G filings are the same threshold with passive intent.
+      This is the fastest large-stake disclosure that exists in public data — days of lag, versus up to 135 for a 13F.
+    </div>
+    ${rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>Filed</th><th>Type</th><th>Target Company</th><th>Filed By</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
+            <td>${sched13Badge(r.form)}</td>
+            <td style="font-weight:600">${escHtml(r.subject || '—')}</td>
+            <td style="color:var(--text-dim)">${escHtml(r.filers.join(', ') || '—')}</td>
+            <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="status-box">No filings match this filter in the current feed window — try "All".</div>'}
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════
 // COMBINED SIGNALS VIEW — ranked by disclosed dollar value
 // ══════════════════════════════════════════════════════════════
 // A "top signal" here means a large disclosed transaction: a hedge fund
@@ -1891,6 +1999,7 @@ function loadScreener() {
 // BOOT
 // ══════════════════════════════════════════════════════════════
 loadInsiderTrades();
+loadSchedule13();
 loadInstitutions();
 loadCongressTrades();
 renderTickerTape();
