@@ -450,12 +450,23 @@ const ALPACA_PROXY_URL = 'https://signal-desk-alpaca-proxy.jahloverules.workers.
 // Curated watchlist of well-known institutional investors and their SEC CIK numbers.
 // Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
 const FUND_WATCHLIST = [
+  // Conviction / value managers
   { name: 'Berkshire Hathaway', cik: '0001067983' },
-  { name: 'Bridgewater Associates', cik: '0001350694' },
-  { name: 'Renaissance Technologies', cik: '0001037389' },
-  { name: 'Pershing Square Capital (Ackman)', cik: '0001336528' },
+  { name: 'Baupost Group (Klarman)', cik: '0001061768' },
+  { name: 'Appaloosa (Tepper)', cik: '0001656456' },
+  { name: 'Duquesne Family Office (Druckenmiller)', cik: '0001536411' },
   { name: 'Scion Asset Management (Burry)', cik: '0001649339' },
-  { name: 'Third Point (Loeb)', cik: '0001040273' }
+  // Activists — the funds whose stake changes most often precede corporate action
+  { name: 'Elliott Investment Management (Singer)', cik: '0001791786' },
+  { name: 'Pershing Square Capital (Ackman)', cik: '0001336528' },
+  { name: 'Icahn (Carl Icahn)', cik: '0000921669' },
+  { name: 'Starboard Value (Smith)', cik: '0001517137' },
+  { name: 'Trian Fund Management (Peltz)', cik: '0001345471' },
+  { name: 'ValueAct Holdings', cik: '0001418814' },
+  { name: 'Third Point (Loeb)', cik: '0001040273' },
+  // Quants — thousands of algorithmic positions, individually less meaningful
+  { name: 'Bridgewater Associates', cik: '0001350694' },
+  { name: 'Renaissance Technologies', cik: '0001037389' }
 ];
 
 let allSignals = [];
@@ -578,6 +589,10 @@ async function flushCusipQueue() {
 // fallback. Same approach as fund.html's detail page.
 // ══════════════════════════════════════════════════════════════
 const CORS_PROXIES = [
+  // Own Worker first — reliable, proper SEC User-Agent, no third-party rate
+  // limits. The free public proxies below are kept only as fallbacks; they
+  // were the reason fund cards randomly failed to load.
+  url => `${ALPACA_PROXY_URL}/sec-proxy?url=${encodeURIComponent(url)}`,
   url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
   url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
   url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
@@ -722,11 +737,35 @@ function summarizeForm4(parsed, filing) {
 }
 
 function insiderWho(r) { return r.owners.map(o => o.name).filter(Boolean).join(', ') || 'Insider'; }
-function insiderRole(r) { return r.owners.map(o => o.role).filter(Boolean).join(' · '); }
+// Joint filers usually share one role — five related "10% Owner" entities
+// filing the same trade shouldn't read "10% Owner" five times.
+function insiderRole(r) { return [...new Set(r.owners.map(o => o.role).filter(Boolean))].join(' · '); }
+
+// One economic transaction is often reported several times — each joint
+// filer (related funds, GPs, holding entities) submits its own Form 4 with
+// identical numbers. Collapse those into a single row; the ×N marker links
+// to every underlying filing.
+function groupDuplicateFilings(list, keyFn) {
+  const groups = new Map();
+  for (const r of list) {
+    const key = keyFn(r);
+    const g = groups.get(key);
+    if (g) {
+      g.count++;
+      if (r.link && !g.links.includes(r.link)) g.links.push(r.link);
+    } else {
+      groups.set(key, { ...r, count: 1, links: r.link ? [r.link] : [] });
+    }
+  }
+  return [...groups.values()];
+}
 
 function renderInsiderTable(progress) {
   const body = document.getElementById('insiders-body');
-  const rows = [...insiderPurchases].sort((a, b) => new Date(b.filed) - new Date(a.filed));
+  const rows = groupDuplicateFilings(
+    [...insiderPurchases].sort((a, b) => new Date(b.filed) - new Date(a.filed)),
+    r => `${r.symbol}|${r.date}|${r.shares}|${Math.round(r.value)}|${insiderWho(r)}`
+  );
   const windowLabel = progress.newestMs
     ? `${new Date(progress.cutoffMs).toLocaleString()} → ${new Date(progress.newestMs).toLocaleString()}`
     : '';
@@ -735,7 +774,7 @@ function renderInsiderTable(progress) {
       Running record of <strong>open-market insider purchases</strong> (Form 4 transaction code P)${windowLabel ? ` covering the last ${INSIDER_WINDOW_HOURS}+ hours of filings — ${windowLabel}` : ''}.
       Equity grants, RSU vesting, tax withholding and option exercises are excluded — these are insiders spending their own money.
       <div class="empty-note" style="margin-top:8px">${progress.done
-        ? `Parsed all ${progress.total} filings in the window · ${rows.length} purchase filing(s) found.`
+        ? `Parsed all ${progress.total} filings in the window · ${rows.length} distinct purchase(s) found (duplicate joint filings collapsed — see ×N markers).`
         : `Parsing filings… ${progress.parsed} / ${progress.total} — rows appear below as purchases are found (newest filings first).`}</div>
     </div>
     ${rows.length ? `
@@ -752,7 +791,7 @@ function renderInsiderTable(progress) {
             <td class="num">${fmtShares(r.shares)}</td>
             <td class="num">${r.avgPrice ? '$' + r.avgPrice.toFixed(2) : '—'}</td>
             <td class="num" style="color:var(--teal);font-weight:600">${r.value ? fmtMoney(r.value) : '—'}</td>
-            <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a></td>
+            <td style="white-space:nowrap"><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a>${r.count > 1 ? ` <span class="mono" style="color:var(--text-muted);font-size:10px" title="This trade was reported in ${r.count} separate Form 4s by joint filers">×${r.count}</span>` : ''}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : (progress.done
@@ -891,7 +930,10 @@ async function loadInstitutions() {
   let anySuccess = false;
   const cards = [];
 
-  for (const fund of FUND_WATCHLIST) {
+  // Each fund needs ~4-6 SEC fetches. With 14 funds that's too slow to run
+  // one-at-a-time, so process a few concurrently (kept modest to respect
+  // SEC's fair-access rate limits). Card order still follows FUND_WATCHLIST.
+  async function processFund(fund) {
     try {
       const subRes = await fetchDirect(`https://data.sec.gov/submissions/CIK${fund.cik}.json`);
       const subData = await subRes.json();
@@ -1009,7 +1051,6 @@ async function loadInstitutions() {
           <a class="fund-link" href="${filingUrl}" target="_blank" rel="noopener">Raw 13F on EDGAR →</a>
         </div>
       `;
-      cards.push(card);
       anySuccess = true;
 
       // Top Signals entries — actual stake changes with dollar sizes (new
@@ -1056,6 +1097,7 @@ async function loadInstitutions() {
             resolveCusipToTicker(c.cusip).then(t => { if (t) { sig.ticker = t; renderSignals(); } });
           });
       }
+      return card;
     } catch (err) {
       const card = document.createElement('div');
       card.className = 'fund-card';
@@ -1063,8 +1105,16 @@ async function loadInstitutions() {
         <div class="fund-name">${escHtml(fund.name)}</div>
         <div class="status-box error" style="padding:12px;font-size:11px">Couldn't load: ${escHtml(err.message)}</div>
       `;
-      cards.push(card);
+      return card;
     }
+  }
+
+  const CONCURRENCY = 3;
+  for (let i = 0; i < FUND_WATCHLIST.length; i += CONCURRENCY) {
+    const chunk = FUND_WATCHLIST.slice(i, i + CONCURRENCY);
+    const chunkCards = await Promise.all(chunk.map(processFund));
+    chunkCards.forEach(c => cards.push(c));
+    renderSignals(); // signals accumulate as each chunk of funds completes
   }
 
   body.innerHTML = '';
@@ -1177,26 +1227,45 @@ async function loadCongressTrades() {
 // grants, RSU vesting, tax withholding or option exercises), or a $250K+
 // congressional trade. Ranked by dollar value, not by whatever was filed
 // most recently.
+// Expand/collapse the per-filing link list on a collapsed duplicate row.
+function toggleSigFilings(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  btn.textContent = isOpen ? btn.dataset.closedLabel : 'hide filings ▴';
+}
+
 function renderSignals() {
   const body = document.getElementById('signals-body');
-  const ranked = allSignals
-    .filter(s => (s.valueUsd || 0) > 0)
-    .sort((a, b) => b.valueUsd - a.valueUsd)
-    .slice(0, 25);
+  // The same trade filed by N joint filers is one signal, not N — group
+  // identical entries first (value is NOT summed: it's one transaction),
+  // then rank. The collapsed row expands to every underlying filing.
+  const ranked = groupDuplicateFilings(
+    allSignals.filter(s => (s.valueUsd || 0) > 0),
+    s => `${s.source}|${s.tag}|${s.entity}|${s.detail}`
+  ).sort((a, b) => b.valueUsd - a.valueUsd).slice(0, 25);
   if (!ranked.length) {
     body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
     return;
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Largest disclosed transactions, ranked by dollar value — hedge-fund stake changes diffed from live 13F filings, open-market insider buys and sells (equity grants, RSU vesting and other compensation are excluded), and congressional trades of $250K+.
+      Largest disclosed transactions, ranked by dollar value — hedge-fund stake changes diffed from live 13F filings, open-market insider buys and sells (equity grants, RSU vesting and other compensation are excluded), and congressional trades of $250K+. When joint filers report the same trade multiple times, it's shown once — expand "filed ×N" to see every filing.
     </div>
-    ${ranked.map(s => `
+    ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
       <div class="ping-wrap"><div class="ping ${s.direction}" style="width:${s.direction === 'neutral' ? 10 : 14}px;height:${s.direction === 'neutral' ? 10 : 14}px"></div></div>
       <div class="signal-main">
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
+        ${s.count > 1 ? `
+        <div style="margin-top:6px">
+          <button class="chart-jump-btn" data-closed-label="filed ×${s.count} — show all ▾" onclick="toggleSigFilings('sig-filings-${i}', this)">filed ×${s.count} — show all ▾</button>
+          <div id="sig-filings-${i}" style="display:none;margin-top:6px">
+            ${s.links.map((l, j) => `<a class="fund-link" style="margin-right:14px" href="${escHtml(l)}" target="_blank" rel="noopener">Filing ${j + 1} →</a>`).join('')}
+          </div>
+        </div>` : (s.link && s.source !== 'institution' ? `<div style="margin-top:6px"><a class="fund-link" href="${escHtml(s.link)}" target="_blank" rel="noopener">View filing →</a></div>` : '')}
       </div>
       <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
       ${s.ticker ? `<button class="chart-jump-btn" title="View price chart for ${escHtml(s.ticker)}" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>` : '<span></span>'}
