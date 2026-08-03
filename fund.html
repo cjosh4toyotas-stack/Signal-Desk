@@ -201,7 +201,12 @@ const alpacaProxyConfigured = !!ALPACA_PROXY_URL && !ALPACA_PROXY_URL.includes('
 // preview, so persistent client storage is appropriate here.
 const TICKER_CACHE_KEY = 'sd_cusip_ticker_cache_v1';
 let tickerCache = {};
-try { tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}'); } catch (e) { tickerCache = {}; }
+try {
+  tickerCache = JSON.parse(localStorage.getItem(TICKER_CACHE_KEY) || '{}');
+  // Self-heal: earlier versions cached FAILED lookups (OpenFIGI rate limits)
+  // as permanent "no ticker" answers. Drop nulls so they resolve fresh.
+  for (const k of Object.keys(tickerCache)) { if (!tickerCache[k]) delete tickerCache[k]; }
+} catch (e) { tickerCache = {}; }
 function saveTickerCache() {
   try { localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(tickerCache)); } catch (e) { /* storage unavailable — non-fatal, just won't persist */ }
 }
@@ -224,17 +229,21 @@ function resolveCusipToTicker(cusip) {
   });
 }
 
+const cusipAttempts = {};
 async function flushCusipQueue() {
   cusipQueueTimer = null;
   if (!cusipQueue.length) return;
   const batch = cusipQueue.splice(0, 10);
   const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
-  const settle = (cusip, ticker) => {
-    tickerCache[cusip] = ticker;
+  // cacheable=true only for answers OpenFIGI actually gave — a rate limit or
+  // network failure must never be remembered as "this CUSIP has no ticker".
+  const settle = (cusip, ticker, cacheable) => {
+    if (cacheable) tickerCache[cusip] = ticker;
     (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
     delete pendingCusipResolvers[cusip];
   };
 
+  let hadError = false;
   try {
     const headers = { 'Content-Type': 'application/json' };
     if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
@@ -250,14 +259,22 @@ async function flushCusipQueue() {
         const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
         ticker = match.ticker || null;
       }
-      settle(cusip, ticker);
+      settle(cusip, ticker, true);
     });
     saveTickerCache();
   } catch (err) {
-    batch.forEach(cusip => settle(cusip, null));
+    // Almost always OpenFIGI rate-limiting. Requeue for retry rather than
+    // settling; only give up (uncached, so the next load retries) after
+    // repeated failures.
+    hadError = true;
+    for (const cusip of batch) {
+      cusipAttempts[cusip] = (cusipAttempts[cusip] || 0) + 1;
+      if (cusipAttempts[cusip] <= 2) cusipQueue.push(cusip);
+      else settle(cusip, null, false);
+    }
   }
 
-  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, 3000); // stay well under 25 req/min
+  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, hadError ? 10000 : 3000); // stay well under 25 req/min
 }
 
 // Daily bars since a given date, via the Alpaca proxy (never calls Alpaca directly —
