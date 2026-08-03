@@ -647,56 +647,220 @@ async function fetchInfoTableHoldings(cik, accessionNoDashes) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SOURCE 1 — INSIDER TRADES (SEC Form 4, live feed)
+// SOURCE 1 — INSIDER TRADES (SEC Form 4, live feed → parsed filings)
 // ══════════════════════════════════════════════════════════════
-async function loadInsiderTrades() {
-  try {
-    const feedUrl = ALPACA_PROXY_URL ? `${ALPACA_PROXY_URL}/insider-feed` : SEC_INSIDER_FEED;
-    const res = await fetch(feedUrl, { headers: { 'Accept': 'application/atom+xml' } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
-    const xml = new DOMParser().parseFromString(text, 'application/xml');
-    if (xml.querySelector('parsererror')) throw new Error('Feed did not parse as XML');
+// The atom feed only says "a Form 4 was filed" — the actual transaction
+// lives inside each filing's ownershipDocument XML. This pipeline pages the
+// feed back at least 24 hours, pulls each filing's XML through the Worker's
+// /form4-batch route, and parses the real transactions out of it.
+//
+// Transaction codes that matter: P = open-market purchase, S = open-market
+// sale. Everything else (A = grants/RSU awards, F = tax withholding,
+// M = option exercises, G = gifts, …) is compensation plumbing, not
+// conviction — deliberately excluded from the purchase record and from
+// Top Signals.
+const INSIDER_WINDOW_HOURS = 24;
+const INSIDER_MAX_PAGES = 10;          // × 100 feed entries per page
+const FORM4_BATCH_SIZE = 10;
+const INSIDER_SIGNAL_MIN_USD = 250000; // open-market trades this size+ feed Top Signals
 
-    const entries = Array.from(xml.querySelectorAll('entry')).slice(0, 40);
-    if (!entries.length) throw new Error('No entries returned');
+let insiderPurchases = [];  // code-P rows shown in the Insider Trades tab
+let insiderBigTrades = [];  // P + S trades above threshold → Top Signals
 
-    const rows = entries.map(e => {
-      const title = e.querySelector('title')?.textContent || 'Unknown filer';
-      const updated = e.querySelector('updated')?.textContent || '';
-      const link = e.querySelector('link')?.getAttribute('href') || '#';
-      return { title, updated, link };
+function form4Val(el, tag) {
+  const t = el && el.getElementsByTagName(tag)[0];
+  if (!t) return '';
+  const v = t.getElementsByTagName('value')[0];
+  return ((v ? v.textContent : t.textContent) || '').trim();
+}
+
+function form4Bool(s) { return s === '1' || /^true$/i.test(s); }
+
+function parseForm4(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) return null;
+  const symbol = form4Val(doc, 'issuerTradingSymbol').toUpperCase();
+  const issuerName = form4Val(doc, 'issuerName');
+  const owners = Array.from(doc.getElementsByTagName('reportingOwner')).map(ro => {
+    const roles = [];
+    if (form4Bool(form4Val(ro, 'isDirector'))) roles.push('Director');
+    if (form4Bool(form4Val(ro, 'isOfficer'))) roles.push(form4Val(ro, 'officerTitle') || 'Officer');
+    if (form4Bool(form4Val(ro, 'isTenPercentOwner'))) roles.push('10% Owner');
+    return { name: form4Val(ro, 'rptOwnerName'), role: roles.join(', ') };
+  });
+  const txns = Array.from(doc.getElementsByTagName('nonDerivativeTransaction')).map(t => ({
+    date: form4Val(t, 'transactionDate'),
+    code: form4Val(t, 'transactionCode').toUpperCase(),
+    shares: parseFloat(form4Val(t, 'transactionShares').replace(/,/g, '')) || 0,
+    price: parseFloat(form4Val(t, 'transactionPricePerShare').replace(/,/g, '')) || 0,
+    ownedAfter: parseFloat(form4Val(t, 'sharesOwnedFollowingTransaction').replace(/,/g, '')) || null
+  }));
+  return { symbol, issuerName, owners, txns };
+}
+
+// Collapses a filing's P (and separately S) transaction lines into one
+// summary row — many Form 4s report a single day's buying as several lines
+// at slightly different prices.
+function summarizeForm4(parsed, filing) {
+  const out = [];
+  for (const code of ['P', 'S']) {
+    const txns = parsed.txns.filter(t => t.code === code && t.shares > 0);
+    if (!txns.length) continue;
+    const shares = txns.reduce((s, t) => s + t.shares, 0);
+    const value = txns.reduce((s, t) => s + t.shares * t.price, 0);
+    const pricedShares = txns.filter(t => t.price > 0).reduce((s, t) => s + t.shares, 0);
+    out.push({
+      code, shares, value,
+      avgPrice: pricedShares ? value / pricedShares : 0,
+      ownedAfter: txns[txns.length - 1].ownedAfter,
+      date: txns[0].date,
+      symbol: parsed.symbol, issuerName: parsed.issuerName, owners: parsed.owners,
+      filed: filing.filed, link: filing.link
     });
+  }
+  return out;
+}
 
+function insiderWho(r) { return r.owners.map(o => o.name).filter(Boolean).join(', ') || 'Insider'; }
+function insiderRole(r) { return r.owners.map(o => o.role).filter(Boolean).join(' · '); }
+
+function renderInsiderTable(progress) {
+  const body = document.getElementById('insiders-body');
+  const rows = [...insiderPurchases].sort((a, b) => new Date(b.filed) - new Date(a.filed));
+  const windowLabel = progress.newestMs
+    ? `${new Date(progress.cutoffMs).toLocaleString()} → ${new Date(progress.newestMs).toLocaleString()}`
+    : '';
+  body.innerHTML = `
+    <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+      Running record of <strong>open-market insider purchases</strong> (Form 4 transaction code P)${windowLabel ? ` covering the last ${INSIDER_WINDOW_HOURS}+ hours of filings — ${windowLabel}` : ''}.
+      Equity grants, RSU vesting, tax withholding and option exercises are excluded — these are insiders spending their own money.
+      <div class="empty-note" style="margin-top:8px">${progress.done
+        ? `Parsed all ${progress.total} filings in the window · ${rows.length} purchase filing(s) found.`
+        : `Parsing filings… ${progress.parsed} / ${progress.total} — rows appear below as purchases are found (newest filings first).`}</div>
+    </div>
+    ${rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>Filed</th><th>Ticker</th><th>Company</th><th>Insider</th><th>Role</th><th>Shares</th><th>Avg Price</th><th>Value</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
+            <td>${tickerLink(r.symbol, r.issuerName)}</td>
+            <td>${escHtml(r.issuerName)}</td>
+            <td>${escHtml(insiderWho(r))}</td>
+            <td style="color:var(--text-dim);font-size:11px">${escHtml(insiderRole(r) || '—')}</td>
+            <td class="num">${fmtShares(r.shares)}</td>
+            <td class="num">${r.avgPrice ? '$' + r.avgPrice.toFixed(2) : '—'}</td>
+            <td class="num" style="color:var(--teal);font-weight:600">${r.value ? fmtMoney(r.value) : '—'}</td>
+            <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : (progress.done
+      ? '<div class="status-box">No open-market insider purchases were reported to the SEC in this window. (Quiet stretches — weekends especially — are normal; the record covers the most recent 24 hours of filing activity.)</div>'
+      : '')}
+  `;
+}
+
+// Insider trades above the threshold become Top Signals entries. Rebuilt
+// from scratch on every batch so re-runs never duplicate.
+function syncInsiderSignals() {
+  allSignals = allSignals.filter(s => s.source !== 'insider');
+  for (const t of insiderBigTrades) {
+    const isBuy = t.code === 'P';
+    allSignals.push({
+      source: 'insider', tag: isBuy ? 'INSIDER BUY' : 'INSIDER SELL',
+      entity: `${insiderWho(t)}${t.symbol ? ' — ' + t.symbol : ''}`,
+      detail: `${insiderRole(t) || 'Insider'} ${isBuy ? 'bought' : 'sold'} ${fmtShares(t.shares)} shares of ${t.issuerName}${t.avgPrice ? ' @ $' + t.avgPrice.toFixed(2) : ''} on the open market`,
+      direction: isBuy ? 'buy' : 'sell',
+      time: t.filed, link: t.link, ticker: t.symbol || null,
+      valueUsd: t.value, sortValue: t.value
+    });
+  }
+  renderSignals();
+}
+
+async function loadInsiderTrades() {
+  const body = document.getElementById('insiders-body');
+  try {
+    if (!ALPACA_PROXY_URL) throw new Error('Worker not configured');
+
+    body.innerHTML = `<div class="status-box"><div class="spinner"></div>Paging the SEC Form 4 feed back at least ${INSIDER_WINDOW_HOURS} hours…</div>`;
+
+    // 1) Page the atom feed backward until it covers a full window (measured
+    //    from the newest filing, so weekends still show the last active day).
+    const filings = [];
+    const seen = new Set();
+    let newestMs = null, cutoffMs = null, reachedCutoff = false;
+
+    for (let page = 0; page < INSIDER_MAX_PAGES && !reachedCutoff; page++) {
+      const res = await fetch(`${ALPACA_PROXY_URL}/insider-feed?start=${page * 100}`, { headers: { 'Accept': 'application/atom+xml' } });
+      if (!res.ok) { if (page === 0) throw new Error('HTTP ' + res.status); break; }
+      const text = await res.text();
+      const xml = new DOMParser().parseFromString(text, 'application/xml');
+      if (xml.querySelector('parsererror')) { if (page === 0) throw new Error('Feed did not parse as XML'); break; }
+      const entries = Array.from(xml.querySelectorAll('entry'));
+      if (!entries.length) break;
+
+      let oldestOnPage = Infinity;
+      let addedThisPage = 0;
+      for (const e of entries) {
+        const href = e.querySelector('link')?.getAttribute('href') || '';
+        const updated = e.querySelector('updated')?.textContent || '';
+        const ms = updated ? new Date(updated).getTime() : 0;
+        if (ms) {
+          oldestOnPage = Math.min(oldestOnPage, ms);
+          if (newestMs === null || ms > newestMs) {
+            newestMs = ms;
+            cutoffMs = newestMs - INSIDER_WINDOW_HOURS * 3600e3;
+          }
+        }
+        // Each filing appears in the feed under both issuer and reporting
+        // person — dedupe by accession number pulled from the link.
+        const m = href.match(/\/data\/(\d+)\/(\d{18})\//);
+        if (!m) continue;
+        const id = `${m[1]}-${m[2]}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        filings.push({ id, filed: updated, link: href });
+        addedThisPage++;
+      }
+      // Nothing new on this page (feed exhausted, or paging not honored) —
+      // stop rather than refetching the same entries.
+      if (!addedThisPage) break;
+      if (cutoffMs && oldestOnPage < cutoffMs) reachedCutoff = true;
+    }
+
+    if (!filings.length) throw new Error('No Form 4 filings returned by the feed');
     setFreshness('insider', 'Insiders', 'live', 'updated ' + new Date().toLocaleTimeString());
 
-    const body = document.getElementById('insiders-body');
-    body.innerHTML = `
-      <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
-        This is the raw SEC filing feed — every Form 4 hitting EDGAR right now, market-wide. Click through to any filing to see the actual transaction (shares, price, buy or sell).
-      </div>
-      <table class="data-table">
-        <thead><tr><th>Filer / Company</th><th>Filed</th><th></th></tr></thead>
-        <tbody>
-          ${rows.map(r => `
-            <tr>
-              <td>${escHtml(r.title)}</td>
-              <td class="mono" style="color:var(--text-muted)">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
-              <td><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">View filing →</a></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+    // 2) Pull + parse each filing's actual transactions, in batches, and
+    //    render progressively — purchases show up as they're found.
+    insiderPurchases = [];
+    insiderBigTrades = [];
+    renderInsiderTable({ parsed: 0, total: filings.length, newestMs, cutoffMs, done: false });
 
-    rows.slice(0, 6).forEach(r => {
-      allSignals.push({
-        source: 'insider', tag: 'INSIDER', entity: r.title,
-        detail: 'New Form 4 filed with the SEC', direction: 'neutral',
-        time: r.updated, link: r.link, sortValue: r.updated ? new Date(r.updated).getTime() : 0
-      });
-    });
-    renderSignals();
+    for (let i = 0; i < filings.length; i += FORM4_BATCH_SIZE) {
+      const batch = filings.slice(i, i + FORM4_BATCH_SIZE);
+      let results = [];
+      try {
+        const res = await fetch(`${ALPACA_PROXY_URL}/form4-batch?ids=${batch.map(f => f.id).join(',')}`);
+        if (res.ok) results = (await res.json()).results || [];
+      } catch (e) { /* individual batch failures are tolerable — keep going */ }
+
+      const byId = Object.fromEntries(batch.map(f => [f.id, f]));
+      for (const r of results) {
+        if (!r.xml) continue;
+        const parsed = parseForm4(r.xml);
+        if (!parsed) continue;
+        for (const s of summarizeForm4(parsed, byId[r.id])) {
+          if (s.code === 'P') insiderPurchases.push(s);
+          if (s.value >= INSIDER_SIGNAL_MIN_USD) insiderBigTrades.push(s);
+        }
+      }
+      const parsedCount = Math.min(i + batch.length, filings.length);
+      renderInsiderTable({ parsed: parsedCount, total: filings.length, newestMs, cutoffMs, done: parsedCount >= filings.length });
+      syncInsiderSignals();
+    }
   } catch (err) {
     setFreshness('insider', 'Insiders', 'stale', 'unreachable');
     document.getElementById('insiders-body').innerHTML = `
@@ -848,12 +1012,50 @@ async function loadInstitutions() {
       cards.push(card);
       anySuccess = true;
 
-      allSignals.push({
-        source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
-        detail: `13F for ${filingDate}: ${current.holdings.length} long positions worth ${fmtMoney(longValue)}${current.puts.length ? `, ${current.puts.length} bearish put position(s)` : ''}`,
-        direction: current.puts.length > current.calls.length ? 'sell' : 'buy',
-        time: filingDate, link: detailUrl, sortValue: new Date(filingDate).getTime()
-      });
+      // Top Signals entries — actual stake changes with dollar sizes (new
+      // stakes, full exits, big adds/trims), not "a filing happened". Only
+      // possible when a prior 13F exists to diff against.
+      if (prior) {
+        const estPrice = h => h.shares ? h.valueUsd / h.shares : 0;
+        const candidates = [];
+        current.holdings.forEach(h => {
+          const p = prior.byCusip[h.cusip];
+          if (!p) {
+            candidates.push({ dir: 'buy', cusip: h.cusip, value: h.valueUsd,
+              detail: `Opened a NEW ${fmtMoney(h.valueUsd)} stake in ${h.issuer} (${fmtShares(h.shares)} shares)` });
+          } else if (h.shares > p.shares) {
+            const dv = (h.shares - p.shares) * estPrice(h);
+            candidates.push({ dir: 'buy', cusip: h.cusip, value: dv,
+              detail: `Added ${fmtShares(h.shares - p.shares)} shares of ${h.issuer} (~${fmtMoney(dv)}) — position now ${fmtMoney(h.valueUsd)}` });
+          } else if (h.shares < p.shares) {
+            const dv = (p.shares - h.shares) * estPrice(h);
+            candidates.push({ dir: 'sell', cusip: h.cusip, value: dv,
+              detail: `Trimmed ${fmtShares(p.shares - h.shares)} shares of ${h.issuer} (~${fmtMoney(dv)}) — position now ${fmtMoney(h.valueUsd)}` });
+          }
+        });
+        prior.holdings.forEach(p => {
+          if (!current.byCusip[p.cusip]) {
+            candidates.push({ dir: 'sell', cusip: p.cusip, value: p.valueUsd,
+              detail: `EXITED entirely — sold the full ${fmtMoney(p.valueUsd)} position in ${p.issuer}` });
+          }
+        });
+        candidates
+          .filter(c => c.value >= 10e6) // ignore sub-$10M noise
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 5)
+          .forEach(c => {
+            const sig = {
+              source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
+              detail: `${c.detail} · 13F filed ${filingDate} (quarter-end snapshot, up to 45-day lag)`,
+              direction: c.dir, time: filingDate, link: detailUrl,
+              valueUsd: c.value, sortValue: c.value, ticker: null
+            };
+            allSignals.push(sig);
+            // Ticker resolution is async + optional — the signal renders
+            // fine without it, and gains a chart button once resolved.
+            resolveCusipToTicker(c.cusip).then(t => { if (t) { sig.ticker = t; renderSignals(); } });
+          });
+      }
     } catch (err) {
       const card = document.createElement('div');
       card.className = 'fund-card';
@@ -927,16 +1129,30 @@ async function loadCongressTrades() {
       </table>
     `;
 
-    rows.slice(0, 6).forEach(r => {
-      const isBuy = /purchase|buy/i.test(r.type || '');
-      const isSell = /sale|sell/i.test(r.type || '');
-      allSignals.push({
-        source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
-        detail: `${r.type || 'Trade'} disclosed ${r.disclosure_date || ''}`, direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
-        time: r.disclosure_date, link: 'https://www.congress.gov', sortValue: r.disclosure_date ? new Date(r.disclosure_date).getTime() : 0,
-        ticker: r.ticker || null
+    // Only sized trades make Top Signals. Congressional disclosures use
+    // broad dollar ranges, so the bracket's lower bound is the conservative
+    // value used for ranking — and anything under $250K stays off the board.
+    const amountMin = a => {
+      const m = String(a || '').replace(/,/g, '').match(/\$?(\d+)/);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    rows
+      .map(r => ({ r, min: amountMin(r.amount) }))
+      .filter(x => x.min >= 250001)
+      .sort((a, b) => b.min - a.min)
+      .slice(0, 8)
+      .forEach(({ r, min }) => {
+        const isBuy = /purchase|buy/i.test(r.type || '');
+        const isSell = /sale|sell/i.test(r.type || '');
+        allSignals.push({
+          source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
+          detail: `${r.type || 'Trade'} of ${r.amount || 'undisclosed size'}, disclosed ${r.disclosure_date || ''}`,
+          direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
+          time: r.disclosure_date, link: 'https://www.congress.gov',
+          valueUsd: min, sortValue: min,
+          ticker: r.ticker || null
+        });
       });
-    });
     renderSignals();
   } catch (err) {
     setFreshness('congress', 'Congress', 'stale', 'unreachable');
@@ -953,13 +1169,29 @@ async function loadCongressTrades() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// COMBINED SIGNALS VIEW
+// COMBINED SIGNALS VIEW — ranked by disclosed dollar value
 // ══════════════════════════════════════════════════════════════
+// A "top signal" here means a large disclosed transaction: a hedge fund
+// opening/exiting/resizing a stake (13F diff), an insider spending or
+// pulling serious money on the open market (Form 4 codes P/S only — no
+// grants, RSU vesting, tax withholding or option exercises), or a $250K+
+// congressional trade. Ranked by dollar value, not by whatever was filed
+// most recently.
 function renderSignals() {
   const body = document.getElementById('signals-body');
-  if (!allSignals.length) return;
-  const sorted = [...allSignals].sort((a, b) => b.sortValue - a.sortValue).slice(0, 20);
-  body.innerHTML = sorted.map(s => `
+  const ranked = allSignals
+    .filter(s => (s.valueUsd || 0) > 0)
+    .sort((a, b) => b.valueUsd - a.valueUsd)
+    .slice(0, 25);
+  if (!ranked.length) {
+    body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
+    return;
+  }
+  body.innerHTML = `
+    <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
+      Largest disclosed transactions, ranked by dollar value — hedge-fund stake changes diffed from live 13F filings, open-market insider buys and sells (equity grants, RSU vesting and other compensation are excluded), and congressional trades of $250K+.
+    </div>
+    ${ranked.map(s => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
       <div class="ping-wrap"><div class="ping ${s.direction}" style="width:${s.direction === 'neutral' ? 10 : 14}px;height:${s.direction === 'neutral' ? 10 : 14}px"></div></div>
       <div class="signal-main">
@@ -968,9 +1200,9 @@ function renderSignals() {
       </div>
       <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
       ${s.ticker ? `<button class="chart-jump-btn" title="View price chart for ${escHtml(s.ticker)}" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>` : '<span></span>'}
-      <div class="signal-meta">${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
-    </div>
-  `).join('');
+      <div class="signal-meta"><span style="color:var(--amber);font-weight:700;font-size:13px">${fmtMoney(s.valueUsd)}</span><br>${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
+    </div>`).join('')}
+  `;
 }
 
 // ══════════════════════════════════════════════════════════════
