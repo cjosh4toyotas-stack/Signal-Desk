@@ -10,12 +10,15 @@
  * Worker calls Alpaca.
  *
  * WHAT IT DOES (and doesn't):
- * - Exposes seven operations: historical daily bars for a single symbol
- *   (/bars), today's top gainers/losers (/movers), today's most active
- *   symbols by volume (/actives), the live SEC Form 4 insider filing feed
- *   (/insider-feed), the House Stock Watcher congressional trade dataset
- *   (/congress-feed), basic company fundamentals for the stock deep-dive
- *   page (/fundamentals), and a live trade/quote WebSocket relay (/stream).
+ * - Exposes: historical daily bars for a single symbol (/bars), today's
+ *   top gainers/losers (/movers), today's most active symbols by volume
+ *   (/actives), the live SEC Form 4 insider filing feed (/insider-feed),
+ *   batched Form 4 XML extraction (/form4-batch), a strict SEC-only proxy
+ *   (/sec-proxy), company fundamentals (/fundamentals), the scheduled
+ *   13D alert scan's status (/alerts-status), and a live trade/quote
+ *   WebSocket relay (/stream). A cron trigger (wrangler.toml) also runs a
+ *   13D alert scan every 30 minutes and pushes tier-2+ filings via ntfy.
+ *   (The old /congress-feed route was removed — its upstream dataset died.)
  * - /fundamentals proxies Finnhub's free-tier `stock/metric` endpoint
  *   (EBITDA, market cap, P/E, revenue per share, margins, 52-week range).
  *   Alpaca's Market Data API doesn't carry fundamentals at all, so this is
@@ -133,8 +136,8 @@ export default {
     if (url.pathname === '/insider-feed') return handleInsiderFeed(url);
     if (url.pathname === '/form4-batch') return handleForm4Batch(url);
     if (url.pathname === '/sec-proxy') return handleSecProxy(url);
-    if (url.pathname === '/congress-feed') return handleCongressFeed();
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
+    if (url.pathname === '/alerts-status') return handleAlertsStatus(env);
 
     if (!env.APCA_API_KEY_ID || !env.APCA_API_SECRET_KEY) {
       return json({ error: 'Proxy is not configured with Alpaca credentials yet' }, 500);
@@ -145,7 +148,24 @@ export default {
     if (url.pathname === '/actives') return handleActives(url, env);
     if (url.pathname === '/stream') return handleStream(request, env);
 
-    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /sec-proxy, /congress-feed, /fundamentals, and /stream are exposed by this proxy.' }, 404);
+    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /sec-proxy, /fundamentals, /alerts-status, and /stream are exposed by this proxy.' }, 404);
+  },
+
+  // ── SCHEDULED ALERT SCAN ─────────────────────────────────────
+  // A dashboard only works while someone is staring at it; 13Ds move stocks
+  // within minutes of hitting EDGAR. This cron (see [triggers] in
+  // wrangler.toml) polls the 13D feed every 30 minutes, tiers each filing
+  // exactly like the frontend does, and pushes anything tier-2+ that hasn't
+  // been alerted before. Dedupe lives in the SIGNAL_KV namespace.
+  //
+  // Push channel is ntfy.sh — zero-signup push notifications. Pick a hard-
+  // to-guess topic name (it's effectively a password), subscribe to it in
+  // the ntfy mobile/desktop app, then:
+  //   wrangler secret put NTFY_TOPIC       (e.g. signal-desk-jh-8k2p1x)
+  // No NTFY_TOPIC set → the scan still runs and records status (visible at
+  // /alerts-status), it just doesn't push anywhere.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runAlertScan(env));
   },
 };
 
@@ -380,6 +400,7 @@ const SEC_PROXY_ALLOWED = [
   'https://www.sec.gov/Archives/',
   'https://www.sec.gov/cgi-bin/browse-edgar',
   'https://data.sec.gov/',
+  'https://efts.sec.gov/', // EDGAR full-text search API (JSON)
 ];
 
 async function handleSecProxy(url) {
@@ -405,28 +426,108 @@ async function handleSecProxy(url) {
     });
 }
 
-// ── GET /congress-feed
-// The House Stock Watcher public dataset, passed through as-is (a raw JSON
-// array) — the frontend's Array.isArray() check works unchanged, only the
-// URL changes. Proxied so a missing/inconsistent CORS policy on the S3
-// bucket can never block this in the browser.
-async function handleCongressFeed() {
-    const feedUrl = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
+// ══════════════════════════════════════════════════════════════
+// ALERT SCAN — cron-driven 13D watcher with KV dedupe + ntfy push
+// ══════════════════════════════════════════════════════════════
+// Mirrors the frontend's tiering: a brand-new 13D from a known activist is
+// tier 3 (the classic setup), any new 13D or an activist's amendment is
+// tier 2. Only tier-2+ filings alert, and each accession alerts exactly
+// once (KV-deduped, 14-day TTL — far longer than the feed window).
+// Workers have no DOMParser, so the atom feed is parsed with regexes; the
+// format is stable enough that this is safe.
+const ALERT_ACTIVIST_ROSTER = [
+  'elliott', 'starboard', 'icahn', 'trian', 'valueact', 'pershing square',
+  'third point', 'jana partners', 'ancora', 'engaged capital', 'sarissa',
+  'sachem head', 'corvex', 'land & buildings', 'legion partners', 'politan',
+  'browning west', 'engine capital', 'barington', 'irenic', 'impactive',
+  'blackwells', 'soros', 'appaloosa', 'baupost', 'duquesne', 'berkshire'
+];
 
-    let upstream;
-    try {
-      upstream = await fetch(feedUrl, { headers: { 'User-Agent': SEC_USER_AGENT } });
-    } catch (err) {
-      return json({ error: 'Upstream fetch failed: ' + err.message }, 502);
+async function runAlertScan(env) {
+  const status = { ran: new Date().toISOString(), scanned: 0, alerted: 0, errors: [] };
+  try {
+    const feedUrl = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SCHEDULE+13D&company=&dateb=&owner=include&count=100&output=atom';
+    const res = await fetch(feedUrl, { headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/atom+xml' } });
+    if (!res.ok) throw new Error('SEC feed HTTP ' + res.status);
+    const text = await res.text();
+
+    // Merge the (Subject)/(Filed by) entry pairs by accession number.
+    const byAcc = new Map();
+    for (const entryMatch of text.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
+      const entry = entryMatch[1];
+      const title = (entry.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+      const href = (entry.match(/<link[^>]*href="([^"]+)"/) || [])[1] || '';
+      const updated = (entry.match(/<updated>([\s\S]*?)<\/updated>/) || [])[1] || '';
+      const m = href.match(/\/data\/(\d+)\/(\d{18})\//);
+      if (!m) continue;
+      const acc = m[2];
+      const decoded = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      const tm = decoded.match(/^(.*?)\s+-\s+(.*?)\s+\((\d{5,10})\)\s+\((Subject|Filed by)\)/i);
+      const form = (tm ? tm[1] : decoded.split(' - ')[0] || '').trim().toUpperCase();
+      const name = tm ? tm[2].trim() : decoded.trim();
+      const role = tm ? tm[4] : '';
+      const rec = byAcc.get(acc) || { acc, form, filed: updated, link: href, subject: '', filers: [] };
+      if (/subject/i.test(role)) rec.subject = name;
+      else if (name && !rec.filers.includes(name)) rec.filers.push(name);
+      if (form) rec.form = form;
+      byAcc.set(acc, rec);
     }
+    status.scanned = byAcc.size;
 
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => '');
-      return json({ error: `House Stock Watcher returned HTTP ${upstream.status}`, detail: text.slice(0, 300) }, upstream.status);
+    for (const rec of byAcc.values()) {
+      const filerNames = rec.filers.join(' | ').toLowerCase();
+      const activist = ALERT_ACTIVIST_ROSTER.find(a => filerNames.includes(a)) || null;
+      const isNewD = rec.form === 'SCHEDULE 13D';
+      const isD = rec.form.startsWith('SCHEDULE 13D');
+      const tier = (isNewD && activist) ? 3 : (isNewD || (isD && activist)) ? 2 : isD ? 1 : 0;
+      if (tier < 2) continue;
+
+      // Dedupe: alert each accession exactly once.
+      if (env.SIGNAL_KV) {
+        const seen = await env.SIGNAL_KV.get('alerted:' + rec.acc);
+        if (seen) continue;
+        await env.SIGNAL_KV.put('alerted:' + rec.acc, '1', { expirationTtl: 14 * 86400 });
+      }
+
+      status.alerted++;
+      if (env.NTFY_TOPIC) {
+        const title = tier >= 3
+          ? `★ ACTIVIST 13D: ${rec.subject || 'unknown target'}`
+          : `13D ${isNewD ? 'filed' : 'amended'}: ${rec.subject || 'unknown target'}`;
+        const body = `${rec.form} — filed by ${rec.filers.join(', ') || 'unknown'}${activist ? ` (roster match: ${activist})` : ''}\n${rec.link}`;
+        try {
+          await fetch('https://ntfy.sh/' + encodeURIComponent(env.NTFY_TOPIC), {
+            method: 'POST',
+            headers: { 'Title': title.slice(0, 200), 'Priority': tier >= 3 ? 'high' : 'default', 'Tags': tier >= 3 ? 'rotating_light' : 'page_facing_up' },
+            body,
+          });
+        } catch (err) {
+          status.errors.push('ntfy push failed: ' + err.message);
+        }
+      }
     }
+  } catch (err) {
+    status.errors.push(err.message);
+  }
+  if (env.SIGNAL_KV) {
+    try { await env.SIGNAL_KV.put('alerts:last', JSON.stringify(status)); } catch { /* non-fatal */ }
+  }
+  return status;
+}
 
-    const data = await upstream.json();
-    return json(data);
+// ── GET /alerts-status
+// The last scheduled scan's summary — when it ran, how many filings it
+// scanned, how many alerts fired, any errors. Sanity-check the cron here.
+async function handleAlertsStatus(env) {
+    if (!env.SIGNAL_KV) {
+      return json({ error: 'SIGNAL_KV binding missing — add the kv_namespaces block in wrangler.toml and redeploy' }, 501);
+    }
+    const last = await env.SIGNAL_KV.get('alerts:last');
+    return json({
+      configured: { kv: true, ntfy: !!env.NTFY_TOPIC },
+      lastRun: last ? JSON.parse(last) : null,
+      note: last ? undefined : 'No scan recorded yet — the cron runs every 30 minutes after deploy; you can also confirm the [triggers] block exists in wrangler.toml.'
+    });
 }
 
 // ── GET /fundamentals?symbol=AAPL
