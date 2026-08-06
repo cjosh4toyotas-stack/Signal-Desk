@@ -84,7 +84,7 @@
 // means ANY website could call your proxy (they'd still be rate-limited
 // by your Alpaca account, but it's safer to lock this down once you know
 // your real domain).
-const ALLOWED_ORIGIN = 'https://cjosh4toyotas-stack.github.io';
+const ALLOWED_ORIGIN = '*'; // '*' so the dashboard works both locally (file://) and on GitHub Pages — the worker is read-only data, no account access
 
 // SEC's fair-access policy requires every request to identify a real
 // contact — browsers block JS from setting User-Agent, which is exactly
@@ -120,7 +120,7 @@ function xml(body, status = 200) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders() });
     }
@@ -135,6 +135,7 @@ export default {
     // depend on Alpaca keys being configured.
     if (url.pathname === '/insider-feed') return handleInsiderFeed(url);
     if (url.pathname === '/form4-batch') return handleForm4Batch(url);
+    if (url.pathname === '/cusip-batch') return handleCusipBatch(url, env, ctx);
     if (url.pathname === '/sec-proxy') return handleSecProxy(url);
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
     if (url.pathname === '/alerts-status') return handleAlertsStatus(env);
@@ -148,7 +149,7 @@ export default {
     if (url.pathname === '/actives') return handleActives(url, env);
     if (url.pathname === '/stream') return handleStream(request, env);
 
-    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /sec-proxy, /fundamentals, /alerts-status, and /stream are exposed by this proxy.' }, 404);
+    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /cusip-batch, /sec-proxy, /fundamentals, /alerts-status, and /stream are exposed by this proxy.' }, 404);
   },
 
   // ── SCHEDULED ALERT SCAN ─────────────────────────────────────
@@ -385,6 +386,131 @@ async function handleForm4Batch(url) {
     }));
 
     return json({ results });
+}
+
+// ── GET /cusip-batch?items=CUSIP~ISSUER NAME,CUSIP~ISSUER NAME,...
+// Server-side CUSIP → ticker resolution with three layers, in order:
+//   1. KV cache — every answer ever resolved is stored permanently
+//      (CUSIPs don't change), so over time this route answers almost
+//      everything instantly with zero upstream calls.
+//   2. OpenFIGI (anonymous batch mapping) for cache misses.
+//   3. Issuer-name matching against SEC's own company_tickers.json for
+//      whatever OpenFIGI couldn't answer (or when it rate-limits, which
+//      the anonymous tier does constantly — the exact reason the ticker
+//      column used to render "—" everywhere when resolution ran in the
+//      browser). company_tickers.json is ~10k names, refreshed daily
+//      into KV, entirely SEC-side and never rate-limited in practice.
+// Response: { tickers: { CUSIP: "AAPL" | null, ... } }  (null = tried
+// everything and genuinely no match — safe for the client to cache).
+const CUSIP_RE = /^[0-9A-Z]{8,9}$/;
+
+// Normalize an issuer name for fuzzy matching: uppercase, strip punctuation
+// and the corporate boilerplate 13F filers and SEC titles disagree on.
+function cusipNormName(s) {
+  return String(s || '').toUpperCase()
+    .replace(/[.,'&\/()-]/g, ' ')
+    .replace(/\b(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LP|L P|LLP|LLC|L L C|LTD|PLC|LIMITED|HOLDINGS|HLDGS|GROUP|GRP|TRUST|COM|CL A|CL B|CLASS A|CLASS B|NEW|DEL|ADR|ADS|SPONSORED|COMMON|STOCK|SHS|ORD)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+async function getSecNameIndex(env) {
+  // Daily-cached map of normalized company title -> ticker.
+  const cached = await env.SIGNAL_KV.get('sec-name-index', 'json');
+  if (cached) return cached;
+  const res = await fetch('https://www.sec.gov/files/company_tickers.json', {
+    headers: { 'User-Agent': SEC_USER_AGENT },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const index = {};
+  for (const entry of Object.values(data)) {
+    const norm = cusipNormName(entry.title);
+    // First writer wins — company_tickers.json is ordered by market cap,
+    // so ambiguous normalized names resolve to the larger company.
+    if (norm && !index[norm]) index[norm] = entry.ticker;
+  }
+  await env.SIGNAL_KV.put('sec-name-index', JSON.stringify(index), { expirationTtl: 86400 });
+  return index;
+}
+
+async function handleCusipBatch(url, env) {
+    if (!env.SIGNAL_KV) return json({ error: 'SIGNAL_KV binding missing — redeploy with wrangler.toml present' }, 500);
+    // Capped at 20 per call: each item can cost a KV read + a KV write, and
+    // the free Workers plan allows 50 subrequests per invocation total.
+    const items = (url.searchParams.get('items') || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 20)
+      .map(raw => {
+        const sep = raw.indexOf('~');
+        const cusip = (sep === -1 ? raw : raw.slice(0, sep)).toUpperCase().trim();
+        const name = sep === -1 ? '' : decodeURIComponent(raw.slice(sep + 1));
+        return { cusip, name };
+      })
+      .filter(it => CUSIP_RE.test(it.cusip));
+    if (!items.length) return json({ error: 'items required: comma-separated CUSIP~ISSUER NAME pairs' }, 400);
+
+    const tickers = {};
+    const misses = [];
+
+    // Layer 1 — KV cache.
+    await Promise.all(items.map(async it => {
+      const hit = await env.SIGNAL_KV.get('cusip:' + it.cusip);
+      if (hit !== null) tickers[it.cusip] = hit === '' ? null : hit;
+      else misses.push(it);
+    }));
+
+    // Layer 2 — OpenFIGI for the misses (10 per request, its batch cap).
+    const figiUnresolved = [];
+    for (let i = 0; i < misses.length; i += 10) {
+      const batch = misses.slice(i, i + 10);
+      try {
+        const res = await fetch('https://api.openfigi.com/v3/mapping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batch.map(it => ({ idType: 'ID_CUSIP', idValue: it.cusip }))),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const results = await res.json();
+        batch.forEach((it, j) => {
+          const entry = results[j];
+          let ticker = null;
+          if (entry && Array.isArray(entry.data) && entry.data.length) {
+            const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
+            ticker = match.ticker || null;
+          }
+          if (ticker) tickers[it.cusip] = ticker;
+          else figiUnresolved.push(it); // let the name-match layer try before caching a null
+        });
+      } catch {
+        // Rate-limited or down — push the whole batch to the name-match layer.
+        figiUnresolved.push(...batch);
+      }
+    }
+
+    // Layer 3 — SEC company-name matching for whatever's left.
+    if (figiUnresolved.length) {
+      const nameIndex = await getSecNameIndex(env).catch(() => null);
+      for (const it of figiUnresolved) {
+        let ticker = null;
+        if (nameIndex && it.name) {
+          const norm = cusipNormName(it.name);
+          ticker = nameIndex[norm] || null;
+          if (!ticker && norm.includes(' ')) {
+            // Last resort: first two words — catches "APPLE COMPUTER" vs "APPLE".
+            const short = norm.split(' ').slice(0, 2).join(' ');
+            ticker = nameIndex[short] || null;
+          }
+        }
+        tickers[it.cusip] = ticker;
+      }
+    }
+
+    // Persist every fresh answer — including nulls (stored as '') so a
+    // genuinely unlisted CUSIP (bonds, foreign, private) isn't re-tried on
+    // every page load. CUSIPs are immutable; no TTL needed.
+    await Promise.all(misses.map(it =>
+      env.SIGNAL_KV.put('cusip:' + it.cusip, tickers[it.cusip] || '').catch(() => {})
+    ));
+
+    return json({ tickers });
 }
 
 // ── GET /sec-proxy?url=https://www.sec.gov/Archives/...
