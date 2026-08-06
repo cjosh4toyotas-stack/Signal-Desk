@@ -20,3 +20,19 @@ class_name = "AlpacaStreamRelay"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["AlpacaStreamRelay"]
+
+# KV namespace "signal-desk-memory" — alert dedupe + scan status. This id
+# is the real namespace already created in this Cloudflare account; if you
+# ever recreate it, run `wrangler kv namespace create signal-desk-memory`
+# and paste the new id here.
+[[kv_namespaces]]
+binding = "SIGNAL_KV"
+id = "9bdcf08b527b426ca13242f0d2e7cc10"
+
+# Cron for the 13D alert scan (see `scheduled` in alpaca-proxy-worker.js):
+# every 30 minutes. Push notifications additionally need:
+#   wrangler secret put NTFY_TOPIC
+# (a hard-to-guess ntfy.sh topic you subscribe to in the ntfy app; without
+# it the scan still runs and /alerts-status still reports, no push is sent)
+[triggers]
+crons = ["*/30 * * * *"]
