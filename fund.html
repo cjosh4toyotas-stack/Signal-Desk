@@ -218,9 +218,11 @@ function saveTickerCache() {
 let cusipQueue = [];
 let cusipQueueTimer = null;
 const pendingCusipResolvers = {};
+const cusipNames = {}; // cusip -> issuer name, for the Worker's SEC name-match fallback
 
-function resolveCusipToTicker(cusip) {
+function resolveCusipToTicker(cusip, issuerName) {
   if (!cusip) return Promise.resolve(null);
+  if (issuerName && !cusipNames[cusip]) cusipNames[cusip] = issuerName;
   if (cusip in tickerCache) return Promise.resolve(tickerCache[cusip]);
   return new Promise(resolve => {
     (pendingCusipResolvers[cusip] = pendingCusipResolvers[cusip] || []).push(resolve);
@@ -229,14 +231,14 @@ function resolveCusipToTicker(cusip) {
   });
 }
 
+// Worker-first resolution (/cusip-batch: KV cache → OpenFIGI → SEC name
+// match). Direct anonymous OpenFIGI — which rate-limited this page's
+// ticker column into permanent "—" — is kept only as the fallback.
 const cusipAttempts = {};
 async function flushCusipQueue() {
   cusipQueueTimer = null;
   if (!cusipQueue.length) return;
-  const batch = cusipQueue.splice(0, 10);
-  const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
-  // cacheable=true only for answers OpenFIGI actually gave — a rate limit or
-  // network failure must never be remembered as "this CUSIP has no ticker".
+  const batch = cusipQueue.splice(0, 20);
   const settle = (cusip, ticker, cacheable) => {
     if (cacheable) tickerCache[cusip] = ticker;
     (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
@@ -245,36 +247,48 @@ async function flushCusipQueue() {
 
   let hadError = false;
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
-    const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(jobs) });
+    if (!alpacaProxyConfigured) throw new Error('no worker');
+    const items = batch.map(c => c + '~' + encodeURIComponent(cusipNames[c] || '')).join(',');
+    const res = await fetch(`${ALPACA_PROXY_URL}/cusip-batch?items=${items}`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const results = await res.json();
-    batch.forEach((cusip, i) => {
-      const entry = results[i];
-      let ticker = null;
-      if (entry && Array.isArray(entry.data) && entry.data.length) {
-        // Prefer the US-listed match — the same CUSIP can map to multiple
-        // share classes/exchanges (ADRs, dual listings).
-        const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
-        ticker = match.ticker || null;
-      }
-      settle(cusip, ticker, true);
-    });
-    saveTickerCache();
-  } catch (err) {
-    // Almost always OpenFIGI rate-limiting. Requeue for retry rather than
-    // settling; only give up (uncached, so the next load retries) after
-    // repeated failures.
-    hadError = true;
+    const data = await res.json();
     for (const cusip of batch) {
-      cusipAttempts[cusip] = (cusipAttempts[cusip] || 0) + 1;
-      if (cusipAttempts[cusip] <= 2) cusipQueue.push(cusip);
-      else settle(cusip, null, false);
+      settle(cusip, data.tickers?.[cusip] ?? null, !!data.tickers && cusip in data.tickers);
+    }
+    saveTickerCache();
+  } catch (workerErr) {
+    const sub = batch.slice(0, 10);
+    batch.slice(10).forEach(c => cusipQueue.push(c));
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
+      const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(sub.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }))) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const results = await res.json();
+      sub.forEach((cusip, i) => {
+        const entry = results[i];
+        let ticker = null;
+        if (entry && Array.isArray(entry.data) && entry.data.length) {
+          // Prefer the US-listed match — the same CUSIP can map to multiple
+          // share classes/exchanges (ADRs, dual listings).
+          const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
+          ticker = match.ticker || null;
+        }
+        settle(cusip, ticker, true);
+      });
+      saveTickerCache();
+    } catch (err) {
+      // Rate limit or network failure — retry a couple of times, never cache.
+      hadError = true;
+      for (const cusip of sub) {
+        cusipAttempts[cusip] = (cusipAttempts[cusip] || 0) + 1;
+        if (cusipAttempts[cusip] <= 2) cusipQueue.push(cusip);
+        else settle(cusip, null, false);
+      }
     }
   }
 
-  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, hadError ? 10000 : 3000); // stay well under 25 req/min
+  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, hadError ? 10000 : 1200);
 }
 
 // Daily bars since a given date, via the Alpaca proxy (never calls Alpaca directly —
@@ -338,7 +352,7 @@ function initPriceContext(filingDateStr) {
       const sparkCell = row.querySelector('.spark-cell');
       const chgCell = row.querySelector('.chg-cell');
 
-      resolveCusipToTicker(cusip).then(ticker => {
+      resolveCusipToTicker(cusip, issuer).then(ticker => {
         if (tickerCell) {
           tickerCell.innerHTML = ticker
             ? `<a class="ticker" href="stock.html?symbol=${encodeURIComponent(ticker)}&issuer=${encodeURIComponent(issuer)}">${escHtml(ticker)}</a>`
