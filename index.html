@@ -161,6 +161,64 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .signal-tag.congress { background: var(--violet-dim); color: var(--violet); border: 1px solid rgba(167,139,250,0.35); }
 .signal-meta { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
+/* ── COMMAND CENTER — always-visible confluence board ─────── */
+.command-center { margin-bottom: 26px; }
+.cc-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.cc-title { font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+.cc-title .cc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 8px var(--teal); margin-right: 8px; animation: pulse-dot 2s infinite; }
+.cc-sub { font-size: 11px; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+.cc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.cc-card {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface2) 100%);
+  border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
+  transition: border-color .15s;
+}
+.cc-card:hover { border-color: var(--blue-glow); }
+.cc-card.cc-hot { border-color: rgba(57,255,143,0.45); box-shadow: 0 0 18px rgba(57,255,143,0.08); }
+.cc-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.cc-ticker { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 700; color: var(--amber); }
+.cc-score-wrap { display: flex; align-items: center; gap: 8px; }
+.cc-score-bar { width: 72px; height: 5px; border-radius: 3px; background: var(--surface2); border: 1px solid var(--border); overflow: hidden; }
+.cc-score-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--amber), var(--teal)); }
+.cc-score-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.cc-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.cc-badge {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.6px;
+  padding: 3px 7px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-dim);
+}
+.cc-badge.b-13d { border-color: rgba(57,255,143,0.4); color: var(--teal); background: var(--teal-dim); }
+.cc-badge.b-insider { border-color: var(--amber-glow); color: var(--amber); background: var(--amber-dim); }
+.cc-badge.b-cluster { border-color: rgba(57,255,143,0.5); color: var(--teal); background: rgba(57,255,143,0.16); }
+.cc-badge.b-fund { border-color: rgba(122,230,90,0.4); color: var(--blue); background: var(--blue-dim); }
+.cc-badge.b-escalation { border-color: rgba(255,92,114,0.5); color: var(--rose); background: var(--rose-dim); }
+.cc-badge.b-proxy { border-color: rgba(255,221,106,0.5); color: var(--violet); background: var(--violet-dim); }
+.cc-detail { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; }
+.cc-detail div { margin-top: 3px; }
+.cc-actions { margin-top: 9px; display: flex; gap: 12px; align-items: center; }
+.cc-empty {
+  grid-column: 1/-1; padding: 18px 20px; border: 1px dashed var(--border); border-radius: 8px;
+  color: var(--text-muted); font-size: 12px; line-height: 1.6;
+}
+.badge-esc { background: var(--rose-dim); color: var(--rose); }
+.pct-delta-up { color: var(--teal); font-size: 10px; }
+.pct-delta-down { color: var(--rose); font-size: 10px; }
+.ctx-note { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--teal); }
+
+/* ── CAMPAIGNS ────────────────────────────────────────────── */
+.campaign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+.campaign-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+.campaign-company { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; }
+.campaign-stage {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 700; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 4px; text-transform: uppercase;
+}
+.stage-stake { background: var(--teal-dim); color: var(--teal); }
+.stage-escalation { background: var(--rose-dim); color: var(--rose); }
+.stage-proxy-fight { background: var(--violet-dim); color: var(--violet); }
+.campaign-events { margin-top: 10px; border-left: 2px solid var(--border); padding-left: 12px; display: flex; flex-direction: column; gap: 7px; }
+.campaign-event { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+.campaign-event .ev-date { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-muted); }
+
 /* ── TABLE ────────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th {
@@ -319,17 +377,32 @@ footer a { color: var(--amber); }
   <div class="hero">
     <div>
       <div class="hero-title">Public disclosures. Private-grade <span>signal</span>.</div>
-      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and members of Congress. This surfaces what's public. It doesn't execute anything.</div>
+      <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and activist campaigns. This surfaces what's public, stacks the streams that agree, and remembers what the feeds forget. It doesn't execute anything.</div>
     </div>
     <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
+  </div>
+
+  <!-- COMMAND CENTER — the confluence board. Always visible above the tabs,
+       so the highest-conviction stacked signals never hide behind a click.
+       A name earns a card here when MULTIPLE independent disclosure streams
+       point at it (insider cluster + 13D + fund stake change beats any one
+       alone), or when a single stream fires its strongest pattern. -->
+  <div class="command-center" id="command-center">
+    <div class="cc-header">
+      <div class="cc-title"><span class="cc-dot"></span>Confluence Board</div>
+      <div class="cc-sub">names where independent signals stack — updates live as each source loads</div>
+    </div>
+    <div class="cc-grid" id="cc-grid">
+      <div class="cc-empty">Scanning all disclosure streams… names appear here the moment two independent signals point at the same company (or one stream fires its strongest pattern — a new activist 13D, an insider cluster buy, a 13G→13D escalation).</div>
+    </div>
   </div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">Top Signals</button>
     <button class="tab-btn" data-tab="watch13d" onclick="switchTab('watch13d')">13D Watch</button>
+    <button class="tab-btn" data-tab="campaigns" onclick="switchTab('campaigns')">Campaigns</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
     <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
-    <button class="tab-btn" data-tab="congress" onclick="switchTab('congress')">Congress</button>
     <button class="tab-btn" data-tab="charts" onclick="switchTab('charts')">Price Charts</button>
     <button class="tab-btn" data-tab="screener" onclick="switchTab('screener')">Screener</button>
     <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">Watchlist</button>
@@ -372,10 +445,10 @@ footer a { color: var(--amber); }
     </div>
   </div>
 
-  <!-- CONGRESS -->
-  <div class="tab-panel" id="tab-congress">
-    <div id="congress-body">
-      <div class="status-box"><div class="spinner"></div>Fetching congressional trade disclosures…</div>
+  <!-- CAMPAIGNS — activist campaign lifecycle tracking -->
+  <div class="tab-panel" id="tab-campaigns">
+    <div id="campaigns-body">
+      <div class="status-box"><div class="spinner"></div>Building campaign timelines from 13D filings and contested-proxy feeds…</div>
     </div>
   </div>
 
@@ -419,7 +492,8 @@ footer a { color: var(--amber); }
   <div class="tab-panel" id="tab-screener">
     <div class="chart-controls">
       <div class="chart-range-btns">
-        <button class="range-btn active" data-screener="gainers" onclick="setScreenerView('gainers')">Top Gainers</button>
+        <button class="range-btn active" data-screener="targets" onclick="setScreenerView('targets')">★ Activist Targets</button>
+        <button class="range-btn" data-screener="gainers" onclick="setScreenerView('gainers')">Top Gainers</button>
         <button class="range-btn" data-screener="losers" onclick="setScreenerView('losers')">Top Losers</button>
         <button class="range-btn" data-screener="actives" onclick="setScreenerView('actives')">Most Active</button>
       </div>
@@ -428,7 +502,7 @@ footer a { color: var(--amber); }
     <div id="screener-body">
       <div class="status-box">Open this tab to load today's movers.</div>
     </div>
-    <div class="chart-note">"Trend" here means today's biggest price movers and highest-volume names, market-wide — a starting point to dig into, not a signal by itself. Resets at market open; shows the prior session's data until then.</div>
+    <div class="chart-note">"★ Activist Targets" scores names already on your radar (watchlist + tickers surfaced by signals) against the academic activist-target profile — underperformance vs SPY, distance off highs, cheap valuation, margin gap, mid-cap size. The movers/actives views are market-wide price noise by comparison — a starting point to dig into, not a signal by itself.</div>
   </div>
 
   <!-- WATCHLIST -->
@@ -448,7 +522,7 @@ footer a { color: var(--amber); }
 </main>
 
 <footer>
-  Data sourced from SEC EDGAR (data.sec.gov) and public congressional disclosure datasets. Congressional and 13F data carry legally mandated reporting delays — see header badges for freshness.
+  Data sourced from SEC EDGAR (data.sec.gov). 13F data carries a legally mandated reporting delay of up to 45 days — see header badges for freshness. Signal history (13G→13D escalations, stake deltas, campaign timelines, insider baselines) accumulates locally in this browser the longer you use the page.
 </footer>
 
 <script>
@@ -456,8 +530,28 @@ footer a { color: var(--amber); }
 // CONFIG — data sources. Update these if a source moves.
 // ══════════════════════════════════════════════════════════════
 const SEC_INSIDER_FEED = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom';
-const CONGRESS_HOUSE_URL = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
-const CONGRESS_SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+// (The congressional-trade source was removed — the public house/senate
+// stock-watcher datasets stopped updating and the tab never worked. The
+// official Clerk/eFD sites have no JSON API a static page can use.)
+
+// ── LOCAL MEMORY ─────────────────────────────────────────────
+// Feeds only show a rolling window, so the app remembers what it has seen
+// in localStorage. That memory is what powers the signals feeds can't give
+// you on their own: 13G→13D escalations, stake deltas across amendments,
+// campaign timelines that build over weeks, and "first insider buy on
+// record" flags. It gets smarter the longer you keep using the page.
+function sdMemGet(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; }
+  catch { return fallback; }
+}
+function sdMemSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full/blocked — non-fatal */ }
+}
+// Normalized entity keys so "ELLIOTT INVESTMENT MANAGEMENT L.P." and
+// "Elliott Investment Management, LP" collide like they should.
+function normName(s) {
+  return String(s || '').toLowerCase().replace(/[.,']/g, '').replace(/\b(inc|corp|corporation|co|company|lp|llp|llc|ltd|plc|limited|holdings|group|management|partners|fund|capital|investment|investments|trust|na|sa)\b/g, '').replace(/\s+/g, ' ').trim();
+}
 
 // Paste the workers.dev URL printed by `wrangler deploy` here (no trailing
 // slash) once you've deployed alpaca-proxy-worker.js. Leave blank and the
@@ -496,6 +590,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   if (name === 'watchlist') { renderWatchlist(); renderTickerTape(); }
   if (name === 'screener') loadScreener();
+  if (name === 'campaigns') renderCampaigns();
 }
 
 function setFreshness(id, label, status, detail) {
@@ -840,21 +935,161 @@ function renderInsiderTable(progress) {
   `;
 }
 
-// Insider trades above the threshold become Top Signals entries. Rebuilt
-// from scratch on every batch so re-runs never duplicate.
+// ── ROLE WEIGHTING ───────────────────────────────────────────
+// The Form 4 literature is consistent on ordering: CFO purchases predict
+// forward returns best (they see the cash), then CEOs, then directors.
+// Rank-and-file officers and 10% owners carry the least information per
+// dollar. The weight scales each trade's ranking score, not its shown value.
+function insiderRoleWeight(r) {
+  const roles = r.owners.map(o => (o.role || '').toLowerCase()).join(' ');
+  if (/financial|cfo/.test(roles)) return 1.5;
+  if (/chief executive|ceo|\bpres/.test(roles)) return 1.3;
+  if (/director/.test(roles)) return 1.15;
+  return 1.0;
+}
+
+// ── CLUSTER DETECTION ────────────────────────────────────────
+// Multiple DISTINCT insiders buying the same stock inside the window is a
+// categorically stronger signal than any single purchase — it means several
+// people with independent views of the same non-public reality reached the
+// same conclusion with their own money. Grouped by symbol; joint filers of
+// one economic trade (same date+shares) count once.
+function detectInsiderClusters() {
+  const bySymbol = {};
+  for (const t of insiderPurchases) {
+    if (!t.symbol) continue;
+    (bySymbol[t.symbol] = bySymbol[t.symbol] || []).push(t);
+  }
+  const clusters = [];
+  for (const [symbol, trades] of Object.entries(bySymbol)) {
+    const distinct = new Map(); // normalized insider name -> their biggest trade
+    for (const t of trades) {
+      const k = normName(insiderWho(t)) + '|' + t.date + '|' + t.shares; // joint filers collapse
+      const nameKey = normName(insiderWho(t));
+      if (!distinct.has(nameKey) || t.value > distinct.get(nameKey).value) distinct.set(nameKey, t);
+    }
+    if (distinct.size >= 2) {
+      const members = [...distinct.values()];
+      clusters.push({
+        symbol, issuerName: members[0].issuerName,
+        count: distinct.size,
+        totalValue: members.reduce((s, t) => s + t.value, 0),
+        maxRoleWeight: Math.max(...members.map(insiderRoleWeight)),
+        latestFiled: members.map(t => t.filed).sort().pop(),
+        links: members.map(t => t.link).filter(Boolean)
+      });
+    }
+  }
+  return clusters;
+}
+
+// ── FIRST-BUY MEMORY ─────────────────────────────────────────
+// "This insider's first open-market buy in years" is one of the strongest
+// Form 4 patterns, but it needs history no live feed provides. This builds
+// that history locally: every purchase seen is remembered, and once the
+// record is old enough to mean something, never-before-seen buyers get
+// flagged. Honest about its own limits — it's "first in the local record",
+// not "first ever".
+const INSIDER_HIST_KEY = 'sd_insider_hist_v1';
+const insiderHist = sdMemGet(INSIDER_HIST_KEY, { firstUse: Date.now(), seen: {} });
+function insiderFirstBuyFlag(t) {
+  const k = normName(insiderWho(t)) + '|' + t.symbol;
+  const known = insiderHist.seen[k];
+  const histAgeDays = (Date.now() - insiderHist.firstUse) / 86400e3;
+  if (!known) {
+    insiderHist.seen[k] = t.filed || new Date().toISOString();
+    return histAgeDays > 14; // only meaningful once the record has depth
+  }
+  return false;
+}
+function saveInsiderHist() {
+  // Cap the record so localStorage never fills: keep the newest ~4000 keys.
+  const keys = Object.keys(insiderHist.seen);
+  if (keys.length > 4000) {
+    keys.sort((a, b) => new Date(insiderHist.seen[a]) - new Date(insiderHist.seen[b]))
+      .slice(0, keys.length - 4000).forEach(k => delete insiderHist.seen[k]);
+  }
+  sdMemSet(INSIDER_HIST_KEY, insiderHist);
+}
+
+// ── PRICE CONTEXT ────────────────────────────────────────────
+// A buy after a 40% drawdown (contrarian conviction) reads differently from
+// a buy at all-time highs (momentum chasing). Fetched lazily for cluster
+// symbols and the biggest single buys, then stitched into the signal text.
+const priceCtxCache = {};
+async function fetchPriceContext(symbol) {
+  if (!ALPACA_PROXY_URL || !symbol) return null;
+  if (symbol in priceCtxCache) return priceCtxCache[symbol];
+  try {
+    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 365);
+    const res = await fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(symbol)}&start=${ymd(start)}&end=${ymd(end)}`);
+    const data = await res.json();
+    if (!res.ok || !data.bars || data.bars.length < 20) return (priceCtxCache[symbol] = null);
+    const closes = data.bars.map(b => b.c);
+    const last = closes[closes.length - 1];
+    const hi = Math.max(...data.bars.map(b => b.h));
+    const lo = Math.min(...data.bars.map(b => b.l));
+    const offHigh = ((hi - last) / hi) * 100;
+    const offLow = ((last - lo) / lo) * 100;
+    return (priceCtxCache[symbol] = { last, offHigh, offLow });
+  } catch { return (priceCtxCache[symbol] = null); }
+}
+function priceCtxLabel(ctx) {
+  if (!ctx) return null;
+  if (ctx.offHigh >= 35) return `bought ${ctx.offHigh.toFixed(0)}% off the 52-wk high — contrarian conviction`;
+  if (ctx.offHigh >= 20) return `bought ${ctx.offHigh.toFixed(0)}% below the 52-wk high`;
+  if (ctx.offHigh <= 5) return 'bought at/near 52-wk highs';
+  return null;
+}
+
+// Insider trades above the threshold become Top Signals entries; clusters
+// get their own boosted entries. Rebuilt from scratch on every batch so
+// re-runs never duplicate.
 function syncInsiderSignals() {
   allSignals = allSignals.filter(s => s.source !== 'insider');
-  for (const t of insiderBigTrades) {
-    const isBuy = t.code === 'P';
-    allSignals.push({
-      source: 'insider', tag: isBuy ? 'INSIDER BUY' : 'INSIDER SELL',
-      entity: `${insiderWho(t)}${t.symbol ? ' — ' + t.symbol : ''}`,
-      detail: `${insiderRole(t) || 'Insider'} ${isBuy ? 'bought' : 'sold'} ${fmtShares(t.shares)} shares of ${t.issuerName}${t.avgPrice ? ' @ $' + t.avgPrice.toFixed(2) : ''} on the open market`,
-      direction: isBuy ? 'buy' : 'sell',
-      time: t.filed, link: t.link, ticker: t.symbol || null,
-      valueUsd: t.value, sortValue: t.value
+  const clusters = detectInsiderClusters();
+  const clusteredSymbols = new Set(clusters.map(c => c.symbol));
+
+  for (const c of clusters) {
+    const sig = {
+      source: 'insider', tag: `CLUSTER BUY ×${c.count}`, cluster: true,
+      entity: `${c.count} insiders — ${c.symbol}`,
+      detail: `${c.count} distinct insiders bought ${c.issuerName} on the open market in the same window (${fmtMoney(c.totalValue)} combined). Cluster buying is the single strongest Form 4 pattern in the research — multiple independent insiders reaching the same conclusion with their own money.`,
+      direction: 'buy', time: c.latestFiled, link: c.links[0] || null, links: c.links,
+      ticker: c.symbol, valueUsd: c.totalValue,
+      // 1.6× cluster premium × the strongest role in the cluster — this is
+      // what pushes clusters above bigger-dollar solo trades in the ranking.
+      sortValue: c.totalValue * 1.6 * c.maxRoleWeight
+    };
+    allSignals.push(sig);
+    fetchPriceContext(c.symbol).then(ctx => {
+      const label = priceCtxLabel(ctx);
+      if (label) { sig.context = label; renderSignals(); }
     });
   }
+
+  for (const t of insiderBigTrades) {
+    const isBuy = t.code === 'P';
+    const firstBuy = isBuy && insiderFirstBuyFlag(t);
+    const w = insiderRoleWeight(t);
+    const sig = {
+      source: 'insider', tag: isBuy ? (firstBuy ? 'FIRST INSIDER BUY' : 'INSIDER BUY') : 'INSIDER SELL',
+      entity: `${insiderWho(t)}${t.symbol ? ' — ' + t.symbol : ''}`,
+      detail: `${insiderRole(t) || 'Insider'} ${isBuy ? 'bought' : 'sold'} ${fmtShares(t.shares)} shares of ${t.issuerName}${t.avgPrice ? ' @ $' + t.avgPrice.toFixed(2) : ''} on the open market${firstBuy ? ' — first purchase by this insider in the local record' : ''}${clusteredSymbols.has(t.symbol) && isBuy ? ' · part of a cluster' : ''}`,
+      direction: isBuy ? 'buy' : 'sell',
+      time: t.filed, link: t.link, ticker: t.symbol || null,
+      valueUsd: t.value,
+      sortValue: t.value * (isBuy ? w : 1) * (firstBuy ? 1.25 : 1)
+    };
+    allSignals.push(sig);
+    if (isBuy && t.value >= 1e6 && !clusteredSymbols.has(t.symbol)) {
+      fetchPriceContext(t.symbol).then(ctx => {
+        const label = priceCtxLabel(ctx);
+        if (label) { sig.context = label; renderSignals(); }
+      });
+    }
+  }
+  saveInsiderHist();
   renderSignals();
 }
 
@@ -1184,78 +1419,312 @@ async function loadInstitutions() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SOURCE 3 — CONGRESSIONAL TRADES
+// SOURCE 3 — CAMPAIGN LIFECYCLE (13D → escalation → proxy fight)
 // ══════════════════════════════════════════════════════════════
-async function loadCongressTrades() {
-  try {
-    const feedUrl = ALPACA_PROXY_URL ? `${ALPACA_PROXY_URL}/congress-feed` : CONGRESS_HOUSE_URL;
-    const res = await fetch(feedUrl);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!Array.isArray(data) || !data.length) throw new Error('Empty dataset returned');
+// A 13D is the START of an activist event, not the event. The value
+// inflection usually comes later: stake increases, a proxy fight, a
+// settlement that puts activists on the board. This tab stitches those
+// stages into per-company timelines from two live inputs — the 13D/G feed
+// (fed in from loadSchedule13) and the contested-proxy filing feeds below —
+// and remembers everything in localStorage, so campaigns build over weeks
+// even though each feed only shows a rolling window.
+//
+// The contested forms, in escalation order: PREC14A/PRRN14A are
+// preliminary proxy statements in a CONTESTED solicitation (a fight is
+// being prepared), DEFC14A/DFRN14A are the definitive versions (the fight
+// is on), DFAN14A is additional soliciting material — the press-release
+// artillery both sides file mid-campaign.
+const PROXY_CONTEST_FORMS = ['PREC14A', 'PRRN14A', 'DEFC14A', 'DFRN14A', 'DFAN14A'];
 
-    const rows = data
-      .filter(t => t.transaction_date)
-      .sort((a, b) => new Date(b.disclosure_date || b.transaction_date) - new Date(a.disclosure_date || a.transaction_date))
-      .slice(0, 40);
+const CAMPAIGN_KEY = 'sd_campaigns_v1';
+const campaignStore = sdMemGet(CAMPAIGN_KEY, {});
 
-    setFreshness('congress', 'Congress', 'live', 'up to 45-day disclosure lag');
-
-    const body = document.getElementById('congress-body');
-    body.innerHTML = `
-      <table class="data-table">
-        <thead><tr><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Disclosed</th></tr></thead>
-        <tbody>
-          ${rows.map(r => `
-            <tr>
-              <td>${escHtml(r.representative || r.senator || 'Unknown')}</td>
-              <td>${tickerLink(r.ticker)}</td>
-              <td>${escHtml(r.type || '—')}</td>
-              <td class="num">${escHtml(r.amount || '—')}</td>
-              <td class="mono" style="color:var(--text-muted)">${escHtml(r.disclosure_date || r.transaction_date || '—')}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-
-    // Only sized trades make Top Signals. Congressional disclosures use
-    // broad dollar ranges, so the bracket's lower bound is the conservative
-    // value used for ranking — and anything under $250K stays off the board.
-    const amountMin = a => {
-      const m = String(a || '').replace(/,/g, '').match(/\$?(\d+)/);
-      return m ? parseInt(m[1], 10) : 0;
-    };
-    rows
-      .map(r => ({ r, min: amountMin(r.amount) }))
-      .filter(x => x.min >= 250001)
-      .sort((a, b) => b.min - a.min)
-      .slice(0, 8)
-      .forEach(({ r, min }) => {
-        const isBuy = /purchase|buy/i.test(r.type || '');
-        const isSell = /sale|sell/i.test(r.type || '');
-        allSignals.push({
-          source: 'congress', tag: 'CONGRESS', entity: (r.representative || r.senator || 'Unknown') + ' — ' + (r.ticker || ''),
-          detail: `${r.type || 'Trade'} of ${r.amount || 'undisclosed size'}, disclosed ${r.disclosure_date || ''}`,
-          direction: isBuy ? 'buy' : (isSell ? 'sell' : 'neutral'),
-          time: r.disclosure_date, link: 'https://www.congress.gov',
-          valueUsd: min, sortValue: min,
-          ticker: r.ticker || null
-        });
-      });
-    renderSignals();
-  } catch (err) {
-    setFreshness('congress', 'Congress', 'stale', 'unreachable');
-    document.getElementById('congress-body').innerHTML = `
-      <div class="status-box error">
-        Couldn't reach the congressional trade dataset (${escHtml(err.message)}).<br>
-        ${ALPACA_PROXY_URL
-          ? `The Worker at <code>ALPACA_PROXY_URL</code> didn't return usable data — check it's redeployed with the <code>/congress-feed</code> route and try again.`
-          : `This can happen if the browser blocks the S3 bucket's response for cross-origin requests. Set <code>ALPACA_PROXY_URL</code> near the top of this file's script to your deployed Worker — it proxies this dataset server-side, which sidesteps the issue entirely.`}
-        If the underlying <code>house-stock-watcher</code> project's hosting has moved, update <code>CONGRESS_HOUSE_URL</code> near the top of this file's script with a current source.<br><br>
-        You can check disclosures directly at <a class="fund-link" href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov →</a>
-      </div>`;
+function recordCampaignEvents(events) {
+  let changed = false;
+  for (const ev of events) {
+    const key = normName(ev.subject);
+    if (!key) continue;
+    const c = campaignStore[key] = campaignStore[key] || { company: ev.subject, events: [], accs: [] };
+    if (c.accs.includes(ev.acc)) continue;
+    c.accs.push(ev.acc);
+    c.company = ev.subject || c.company;
+    c.events.push({ date: ev.date, form: ev.form, filers: ev.filers, link: ev.link, kind: ev.kind });
+    c.events.sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (c.events.length > 30) { c.events = c.events.slice(0, 30); }
+    if (c.accs.length > 60) c.accs = c.accs.slice(-60);
+    changed = true;
   }
+  if (changed) {
+    // Cap the store at ~150 companies, dropping the stalest campaigns.
+    const keys = Object.keys(campaignStore);
+    if (keys.length > 150) {
+      keys.sort((a, b) => new Date(campaignStore[a].events[0]?.date || 0) - new Date(campaignStore[b].events[0]?.date || 0))
+        .slice(0, keys.length - 150).forEach(k => delete campaignStore[k]);
+    }
+    sdMemSet(CAMPAIGN_KEY, campaignStore);
+    renderCampaigns();
+    renderCommandCenter();
+  }
+}
+
+function campaignStage(c) {
+  const kinds = new Set(c.events.map(e => e.kind));
+  if (kinds.has('proxy-fight')) return 'proxy-fight';
+  if (kinds.has('escalation')) return 'escalation';
+  return 'stake';
+}
+const STAGE_LABEL = { 'stake': 'STAKE BUILT', 'escalation': 'ESCALATION', 'proxy-fight': 'PROXY FIGHT' };
+const KIND_LABEL = {
+  'stake': 'New 13D — activist stake disclosed',
+  'stake-change': '13D amendment — position/intent updated',
+  'escalation': '13G→13D — passive holder turned ACTIVE',
+  'proxy-fight': 'Contested proxy filing — fight underway'
+};
+
+async function loadCampaigns() {
+  try {
+    let anyFeed = false;
+    const events = [];
+    for (const form of PROXY_CONTEST_FORMS) {
+      try {
+        const res = await fetchDirect(SCHED13_FEED(form));
+        const text = await res.text();
+        const xml = new DOMParser().parseFromString(text, 'application/xml');
+        if (xml.querySelector('parsererror')) continue;
+        anyFeed = true;
+        const byAcc = new Map();
+        for (const e of Array.from(xml.querySelectorAll('entry'))) {
+          const title = e.querySelector('title')?.textContent || '';
+          const updated = e.querySelector('updated')?.textContent || '';
+          const link = e.querySelector('link')?.getAttribute('href') || '';
+          const m = link.match(/\/data\/(\d+)\/(\d{18})\//);
+          if (!m) continue;
+          const acc = m[2];
+          const tm = title.match(/^(.*?)\s+-\s+(.*?)\s+\((\d{5,10})\)\s+\((Subject|Filed by)\)/i);
+          const name = tm ? tm[2].trim() : title.trim();
+          const role = tm ? tm[4] : '';
+          const rec = byAcc.get(acc) || { acc, form, filed: updated, link, subject: '', filers: [] };
+          if (/subject/i.test(role)) rec.subject = name;
+          else if (name && !rec.filers.includes(name)) rec.filers.push(name);
+          byAcc.set(acc, rec);
+        }
+        for (const rec of byAcc.values()) {
+          // A definitive/preliminary contested proxy with no separate subject
+          // line is usually the company defending itself — still campaign news.
+          events.push({
+            acc: rec.acc, date: rec.filed, form: rec.form,
+            subject: rec.subject || rec.filers[0] || '', filers: rec.filers,
+            link: rec.link, kind: 'proxy-fight'
+          });
+        }
+      } catch (e) { /* one form's feed failing shouldn't kill the rest */ }
+    }
+    if (anyFeed) setFreshness('campaigns', 'Campaigns', 'live', 'proxy-contest feeds live');
+    recordCampaignEvents(events);
+    renderCampaigns();
+  } catch (err) {
+    setFreshness('campaigns', 'Campaigns', 'stale', 'unreachable');
+    renderCampaigns(); // stored history still renders even if feeds fail
+  }
+}
+
+// Approximate activist track records, compiled from public campaign
+// summaries (13D Monitor–style aggregate reporting, academic studies,
+// financial press) through 2025. These are ORIENTATION, not statistics —
+// success definitions vary (board seats won, settlements, target
+// outperformance). Shown so a 13D from Starboard reads differently from a
+// 13D from an unknown family office, which is exactly how practitioners
+// read them.
+const ACTIVIST_TRACK_RECORD = [
+  { match: 'elliott', name: 'Elliott Investment Management', record: '150+ campaigns; historically wins board representation or strategic change in roughly two-thirds of them. Largest, most feared activist; targets any size, often forces sales/breakups.' },
+  { match: 'starboard', name: 'Starboard Value', record: '100+ campaigns; historically the highest board-seat hit rate of any major activist (roughly 8 in 10 campaigns gain seats or settle). Operational-improvement playbook.' },
+  { match: 'icahn', name: 'Icahn Enterprises', record: 'Decades, 100+ campaigns; mixed recent record but still moves prices on filing. Prefers direct board confrontation and consent solicitations.' },
+  { match: 'trian', name: 'Trian Fund Management', record: '~25 concentrated campaigns; long-hold "constructivist" style at mega-caps. Roughly half end in board seats (P&G, GE, Disney fight lost).' },
+  { match: 'valueact', name: 'ValueAct Holdings', record: '50+ positions; quiet, collaborative — usually invited onto boards rather than fighting proxy wars. Board seat in most engagements.' },
+  { match: 'third point', name: 'Third Point', record: 'Dozens of campaigns; event-driven with activist bursts (Nestlé, Disney, Shell). Wins changes more often via pressure than formal fights.' },
+  { match: 'jana', name: 'JANA Partners', record: '75+ campaigns; strong record forcing sales of mid-cap targets — the "JANA files, company gets sold" pattern is real enough that arbs trade it.' },
+  { match: 'ancora', name: 'Ancora', record: 'Aggressive mid/small-cap campaigner (Norfolk Southern, C.H. Robinson); increasingly wins seats or CEO changes.' },
+  { match: 'engaged', name: 'Engaged Capital', record: 'Small/mid-cap operational activist; majority of campaigns end in settlements with board representation.' },
+  { match: 'sachem head', name: 'Sachem Head', record: 'Concentrated Pershing-lineage activist; several high-profile wins (US Foods, Twilio pressure).' },
+  { match: 'politan', name: 'Politan Capital', record: 'Newer, surgical governance activist (Centene, Masimo — won control fight). Small book, high hit rate.' },
+  { match: 'land & buildings', name: 'Land & Buildings', record: 'REIT-specialist activist; regularly forces strategic reviews/M&A in real estate names.' }
+];
+function activistRecordFor(filers) {
+  const names = (filers || []).join(' | ').toLowerCase();
+  return ACTIVIST_TRACK_RECORD.find(a => names.includes(a.match)) || null;
+}
+
+function renderCampaigns() {
+  const body = document.getElementById('campaigns-body');
+  if (!body) return;
+  const campaigns = Object.values(campaignStore)
+    .filter(c => c.events.length)
+    .sort((a, b) => new Date(b.events[0].date) - new Date(a.events[0].date));
+
+  const stageRank = { 'proxy-fight': 2, 'escalation': 1, 'stake': 0 };
+  campaigns.sort((a, b) => {
+    const sr = stageRank[campaignStage(b)] - stageRank[campaignStage(a)];
+    return sr !== 0 ? sr : new Date(b.events[0].date) - new Date(a.events[0].date);
+  });
+
+  body.innerHTML = `
+    <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
+      <strong>Campaign timelines</strong> — each card is one target company, with every tracked disclosure stitched into a lifecycle:
+      stake built (13D) → escalation (stake raised, or a passive 13G holder turning active) → proxy fight (contested proxy filings: PREC14A/DEFC14A/DFAN14A and variants).
+      History accumulates in this browser as you use the page — feeds only show a rolling window, so the timeline memory is what makes multi-week campaigns visible at all. The activist track-record notes are approximate compilations through 2025, for orientation only.
+    </div>
+    ${campaigns.length ? `<div class="campaign-grid">
+      ${campaigns.slice(0, 30).map(c => {
+        const stage = campaignStage(c);
+        const rec = activistRecordFor(c.events.flatMap(e => e.filers || []));
+        return `
+        <div class="campaign-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="campaign-company">${escHtml(c.company)}</div>
+            <span class="campaign-stage stage-${stage}">${STAGE_LABEL[stage]}</span>
+          </div>
+          ${rec ? `<div style="font-size:11px;color:var(--text-dim);margin-top:8px;line-height:1.55"><span style="color:var(--teal);font-family:'IBM Plex Mono',monospace;font-size:10px">★ TRACK RECORD</span> — ${escHtml(rec.record)}</div>` : ''}
+          <div class="campaign-events">
+            ${c.events.slice(0, 8).map(e => `
+              <div class="campaign-event">
+                <span class="ev-date">${e.date ? new Date(e.date).toLocaleDateString() : '—'}</span> · <strong>${escHtml(e.form)}</strong> — ${escHtml(KIND_LABEL[e.kind] || e.kind)}${e.filers && e.filers.length ? `<br><span style="color:var(--text-muted)">${escHtml(e.filers.slice(0, 3).join(', '))}</span>` : ''}
+                ${e.link ? ` <a class="fund-link" href="${escHtml(e.link)}" target="_blank" rel="noopener">→</a>` : ''}
+              </div>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : `
+    <div class="status-box">
+      No campaigns on record yet. Timelines build automatically from live 13D activity (tier-2+ filings feed in from the 13D Watch tab) and contested-proxy filings — keep the page in use and this fills in over days and weeks. Quiet stretches are normal: real activist campaigns are rare events.
+    </div>`}
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONFLUENCE BOARD — the always-visible command center
+// ══════════════════════════════════════════════════════════════
+// The proven pattern this implements: signals that STACK matter more than
+// any single signal. An insider cluster + a new 13D + a tracked fund's
+// stake change on the same name is a categorically different event than
+// one alone. Each stream contributes points per name; names with 2+
+// independent streams get a confluence multiplier and float to the top of
+// a board that never hides behind a tab.
+function computeConfluence() {
+  const byKey = {};
+  const add = (key, label, src, pts, detail, link, ticker) => {
+    if (!key) return;
+    const e = byKey[key] = byKey[key] || { label, sources: new Set(), badges: [], pts: 0, details: [], links: [], ticker: null };
+    e.sources.add(src);
+    e.pts += pts;
+    if (detail && e.details.length < 4 && !e.details.includes(detail)) e.details.push(detail);
+    if (link && e.links.length < 4 && !e.links.includes(link)) e.links.push(link);
+    if (ticker) e.ticker = e.ticker || ticker;
+    if (label && (!e.label || label.length < e.label.length)) e.label = label;
+  };
+  const fresh = (time, halfLifeDays) => {
+    if (!time) return 0.5;
+    const age = Math.max(0, (Date.now() - new Date(time).getTime()) / 86400e3);
+    return Math.pow(0.5, age / halfLifeDays);
+  };
+
+  // Stream 1+2: everything already in Top Signals (insider buys/clusters,
+  // fund stake changes). Dollar value → log points, so a $10M add doesn't
+  // drown a $600K CFO cluster.
+  for (const s of allSignals) {
+    if (!(s.valueUsd > 0) || s.direction === 'sell') continue;
+    const key = s.ticker ? 'T:' + s.ticker : null;
+    if (!key) continue;
+    let pts = Math.max(0.5, Math.log10(s.valueUsd / 1e5)) * fresh(s.time, 14);
+    let badge = null;
+    if (s.cluster) { pts *= 1.8; badge = { cls: 'b-cluster', text: '👥 CLUSTER BUY' }; }
+    else if (s.source === 'insider') badge = { cls: 'b-insider', text: '💼 INSIDER BUY' };
+    else if (s.source === 'institution') badge = { cls: 'b-fund', text: '🏛 FUND STAKE' };
+    add(key, s.ticker, s.source + (s.cluster ? ':cluster' : ''), pts, s.detail, s.link, s.ticker);
+    const entry = byKey[key];
+    if (badge && !entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
+    if (s.context && !entry.details.includes(s.context)) entry.details.push('↳ ' + s.context);
+  }
+
+  // Stream 3: live 13D activity (keyed by company name — the feed has no
+  // ticker; if a signal above shares the name, keys merge below).
+  for (const r of sched13Filings) {
+    if (r.tier < 2) continue;
+    const key = 'N:' + normName(r.subject);
+    let pts = r.tier * 2.2 * fresh(r.filed, 21);
+    add(key, r.subject, 'sched13', pts,
+      `${r.form === 'SCHEDULE 13D' ? 'New 13D' : '13D amendment'} by ${r.filers.slice(0, 2).join(', ')}${r.pct ? ' — ' + r.pct.toFixed(1) + '% stake' : ''}${r.pctDelta != null ? ` (${r.pctDelta > 0 ? '+' : ''}${r.pctDelta.toFixed(1)}pt vs prior)` : ''}`,
+      r.link, null);
+    const entry = byKey[key];
+    const badge = r.escalation ? { cls: 'b-escalation', text: '⚠ 13G→13D' }
+      : r.activist ? { cls: 'b-13d', text: '★ ACTIVIST 13D' }
+      : { cls: 'b-13d', text: '13D' };
+    if (!entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
+  }
+
+  // Stream 4: campaigns in proxy-fight stage — the late-cycle confirmation.
+  for (const c of Object.values(campaignStore)) {
+    if (campaignStage(c) !== 'proxy-fight' || !c.events.length) continue;
+    const key = 'N:' + normName(c.company);
+    add(key, c.company, 'campaign', 2.5 * fresh(c.events[0].date, 30),
+      'Contested proxy fight underway — see Campaigns tab for the timeline', null, null);
+    const entry = byKey[key];
+    if (!entry.badges.some(b => b.text === '⚔ PROXY FIGHT')) entry.badges.push({ cls: 'b-proxy', text: '⚔ PROXY FIGHT' });
+  }
+
+  // Merge name-keyed entries into ticker-keyed ones when an issuer name
+  // matches — that's how a 13D on "ACME CORP" stacks with insider buys on
+  // ticker ACME resolved from Form 4s (which carry both name and symbol).
+  const nameOfTicker = {};
+  for (const s of allSignals) {
+    if (s.ticker && s.detail) {
+      const m = insiderPurchases.find(p => p.symbol === s.ticker);
+      if (m) nameOfTicker[normName(m.issuerName)] = 'T:' + s.ticker;
+    }
+  }
+  for (const [key, e] of Object.entries(byKey)) {
+    if (!key.startsWith('N:')) continue;
+    const tKey = nameOfTicker[key.slice(2)];
+    if (tKey && byKey[tKey]) {
+      const t = byKey[tKey];
+      t.pts += e.pts;
+      e.sources.forEach(s => t.sources.add(s));
+      e.badges.forEach(b => { if (!t.badges.some(x => x.text === b.text)) t.badges.push(b); });
+      e.details.forEach(d => { if (t.details.length < 5 && !t.details.includes(d)) t.details.push(d); });
+      e.links.forEach(l => { if (t.links.length < 5 && !t.links.includes(l)) t.links.push(l); });
+      delete byKey[key];
+    }
+  }
+
+  return Object.values(byKey)
+    .map(e => ({ ...e, score: e.pts * (1 + 0.45 * (e.sources.size - 1)) }))
+    .filter(e => e.score >= 1.2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+}
+
+function renderCommandCenter() {
+  const grid = document.getElementById('cc-grid');
+  if (!grid) return;
+  const entries = computeConfluence();
+  if (!entries.length) return; // keep the scanning placeholder until something earns a card
+  const maxScore = entries[0].score || 1;
+  grid.innerHTML = entries.map(e => `
+    <div class="cc-card ${e.sources.size >= 2 ? 'cc-hot' : ''}">
+      <div class="cc-card-top">
+        <div class="cc-ticker">${e.ticker ? tickerLink(e.ticker) : escHtml(e.label)}</div>
+        <div class="cc-score-wrap" title="Confluence score — per-stream points × a multiplier for each additional independent signal stream pointing at this name">
+          <div class="cc-score-bar"><div class="cc-score-fill" style="width:${Math.round((e.score / maxScore) * 100)}%"></div></div>
+          <span class="cc-score-num">${e.score.toFixed(1)}</span>
+        </div>
+      </div>
+      <div class="cc-badges">${e.badges.map(b => `<span class="cc-badge ${b.cls}">${b.text}</span>`).join('')}${e.sources.size >= 2 ? '<span class="cc-badge" style="border-color:var(--amber-glow);color:var(--amber)">◈ ' + e.sources.size + ' STREAMS</span>' : ''}</div>
+      <div class="cc-detail">${e.details.slice(0, 3).map(d => `<div>${escHtml(d)}</div>`).join('')}</div>
+      <div class="cc-actions">
+        ${e.ticker ? `<button class="chart-jump-btn" onclick="switchTab('charts'); loadChart('${escHtml(e.ticker)}')">chart →</button><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(e.ticker)}')">+ watch</button>` : ''}
+        ${e.links.slice(0, 2).map((l, i) => `<a class="fund-link" href="${escHtml(l)}" target="_blank" rel="noopener">filing ${i + 1} →</a>`).join('')}
+      </div>
+    </div>
+  `).join('');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1299,9 +1768,51 @@ function sched13Activist(rec) {
 function sched13Tier(rec) {
   const isNewD = rec.form === 'SCHEDULE 13D';
   const isD = rec.form.startsWith('SCHEDULE 13D');
+  if (rec.escalation) return 4; // 13G→13D conversion — passive turned active
   if (isNewD && rec.activist) return 3;
   if (isNewD || (isD && rec.activist)) return 2;
   return isD ? 1 : 0;
+}
+
+// ── FILER MEMORY: escalations + stake deltas ─────────────────
+// The live feed only shows a rolling window, so the classic escalation
+// signal — a holder who filed a PASSIVE 13G later filing an ACTIVE 13D on
+// the same company — is invisible without memory. Same for amendment
+// deltas: a 13D/A's percent means little unless you know the prior one.
+// Both live in localStorage, keyed by (subject company, filer), and build
+// the longer the page is used.
+const SCHED13_HIST_KEY = 'sd_sched13_hist_v1';
+const sched13Hist = sdMemGet(SCHED13_HIST_KEY, {});
+function sched13HistKeys(rec) {
+  const subj = normName(rec.subject);
+  if (!subj) return [];
+  return rec.filers.map(f => subj + '||' + normName(f)).filter(k => !k.endsWith('||'));
+}
+function applySched13Memory() {
+  const nowIso = new Date().toISOString();
+  for (const rec of sched13Filings) {
+    const isD = rec.form.startsWith('SCHEDULE 13D');
+    const isG = rec.form.startsWith('SCHEDULE 13G');
+    for (const k of sched13HistKeys(rec)) {
+      const prev = sched13Hist[k];
+      // Escalation: we previously saw this filer on this company as a 13G
+      // (passive) and they're now filing a 13D (active intent).
+      if (isD && prev && prev.family === 'G') rec.escalation = true;
+      if (prev && prev.pct != null) rec.prevPct = prev.pct;
+      sched13Hist[k] = {
+        family: isD ? 'D' : (isG ? 'G' : (prev ? prev.family : '?')),
+        pct: prev ? prev.pct : null, // updated later when the % is parsed
+        seen: nowIso
+      };
+    }
+  }
+  // Cap: keep the newest ~3000 filer/company pairs.
+  const keys = Object.keys(sched13Hist);
+  if (keys.length > 3000) {
+    keys.sort((a, b) => new Date(sched13Hist[a].seen) - new Date(sched13Hist[b].seen))
+      .slice(0, keys.length - 3000).forEach(k => delete sched13Hist[k]);
+  }
+  sdMemSet(SCHED13_HIST_KEY, sched13Hist);
 }
 
 // If the filer is one of the funds tracked on the Hedge Funds tab, link
@@ -1355,10 +1866,20 @@ async function loadSchedule13() {
     }
     if (!anyFeed) throw new Error('Neither 13D nor 13G feed was reachable');
     sched13Filings = [...byAcc.values()].sort((a, b) => new Date(b.filed) - new Date(a.filed));
-    sched13Filings.forEach(r => { r.activist = sched13Activist(r); r.tier = sched13Tier(r); });
+    sched13Filings.forEach(r => { r.activist = sched13Activist(r); });
+    applySched13Memory(); // must run before tiering — escalation sets tier 4
+    sched13Filings.forEach(r => { r.tier = sched13Tier(r); });
     if (!sched13Filings.length) throw new Error('No 13D/13G filings returned');
     setFreshness('sched13', '13D/G', 'live', 'filed within days of the trade');
     renderSched13();
+    recordCampaignEvents(sched13Filings
+      .filter(r => r.tier >= 2)
+      .map(r => ({
+        acc: r.acc, date: r.filed, form: r.form, subject: r.subject,
+        filers: r.filers, link: r.link,
+        kind: r.escalation ? 'escalation' : (r.form === 'SCHEDULE 13D' ? 'stake' : 'stake-change')
+      })));
+    renderCommandCenter();
   } catch (err) {
     setFreshness('sched13', '13D/G', 'stale', 'unreachable');
     body.innerHTML = `
@@ -1398,7 +1919,7 @@ function renderSched13() {
         ${rows.map(r => `
           <tr${r.tier >= 2 ? ' style="background:rgba(57,255,143,0.05)"' : ''}>
             <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
-            <td style="white-space:nowrap">${sched13Badge(r.form)}${r.activist ? ` <span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)" title="Filer matches the known-activist roster">★ ${escHtml(r.activist.toUpperCase())}</span>` : ''}</td>
+            <td style="white-space:nowrap">${sched13Badge(r.form)}${r.escalation ? ' <span class="badge-pill badge-esc" title="This filer previously held this company passively (13G) and has now filed an ACTIVE 13D — the classic passive-turns-hostile escalation">13G→13D</span>' : ''}${r.activist ? ` <span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)" title="Filer matches the known-activist roster">★ ${escHtml(r.activist.toUpperCase())}</span>` : ''}</td>
             <td style="font-weight:600">${escHtml(r.subject || '—')}</td>
             <td style="color:var(--text-dim)">${escHtml(r.filers.join(', ') || '—')}</td>
             <td class="num mono" id="s13pct-${r.acc}" style="color:var(--amber)">${r.form.startsWith('SCHEDULE 13D') ? '…' : '—'}</td>
@@ -1437,12 +1958,28 @@ async function enrichSched13Percents(rows) {
         if (pm) pct = parseFloat(pm[1]);
       }
       sched13PctCache[r.acc] = pct != null ? pct.toFixed(1) + '%' : null;
+      // Remember the parsed % per (company, filer) so the NEXT amendment
+      // shows a delta — and show one now if a prior % is already on record.
+      if (pct != null) {
+        r.pct = pct;
+        if (r.prevPct != null && Math.abs(pct - r.prevPct) >= 0.1) r.pctDelta = pct - r.prevPct;
+        for (const k of sched13HistKeys(r)) {
+          if (sched13Hist[k]) sched13Hist[k].pct = pct;
+        }
+        sdMemSet(SCHED13_HIST_KEY, sched13Hist);
+      }
     } catch (e) {
       sched13PctCache[r.acc] = null;
     }
     const c = document.getElementById('s13pct-' + r.acc);
-    if (c) c.textContent = sched13PctCache[r.acc] || '—';
+    if (c) {
+      const deltaHtml = r.pctDelta != null
+        ? `<br><span class="${r.pctDelta > 0 ? 'pct-delta-up' : 'pct-delta-down'}" title="Change vs the prior filing by this filer on this company (from local memory)">${r.pctDelta > 0 ? '▲ +' : '▼ '}${r.pctDelta.toFixed(1)}pt</span>`
+        : '';
+      c.innerHTML = (sched13PctCache[r.acc] || '—') + deltaHtml;
+    }
   }
+  renderCommandCenter();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1496,9 +2033,12 @@ function renderSignals() {
   )
     .map(s => ({ ...s, ageDays: signalAgeDays(s) }))
     .filter(s => s.ageDays <= SIGNAL_MAX_AGE_DAYS)
-    .map(s => ({ ...s, score: s.valueUsd * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) }))
+    // sortValue carries the quality weights (insider role, cluster premium,
+    // first-buy bonus); valueUsd stays the honest displayed dollar figure.
+    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 25);
+  renderCommandCenter();
   if (!ranked.length) {
     body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
     return;
@@ -1513,6 +2053,7 @@ function renderSignals() {
       <div class="signal-main">
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
+        ${s.context ? `<div class="ctx-note" style="margin-top:4px">↳ ${escHtml(s.context)}</div>` : ''}
         ${s.count > 1 ? `
         <div style="margin-top:6px">
           <button class="chart-jump-btn" data-closed-label="filed ×${s.count} — show all ▾" onclick="toggleSigFilings('sig-filings-${i}', this)">filed ×${s.count} — show all ▾</button>
@@ -1521,7 +2062,7 @@ function renderSignals() {
           </div>
         </div>` : (s.link && s.source !== 'institution' ? `<div style="margin-top:6px"><a class="fund-link" href="${escHtml(s.link)}" target="_blank" rel="noopener">View filing →</a></div>` : '')}
       </div>
-      <div class="signal-tag ${s.source === 'insider' ? 'insider' : s.source === 'institution' ? 'institution' : 'congress'}">${escHtml(s.tag)}</div>
+      <div class="signal-tag ${s.source === 'insider' ? 'insider' : 'institution'}">${escHtml(s.tag)}</div>
       ${s.ticker ? `<button class="chart-jump-btn" title="View price chart for ${escHtml(s.ticker)}" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>` : '<span></span>'}
       <div class="signal-meta"><span style="color:var(--amber);font-weight:700;font-size:13px">${fmtMoney(s.valueUsd)}</span><br><span style="color:${s.ageDays < 3 ? 'var(--teal)' : 'var(--text-muted)'}">${fmtAge(s.ageDays)}</span> · ${s.time ? new Date(s.time).toLocaleDateString() : '—'}</div>
     </div>`).join('')}
@@ -2017,7 +2558,7 @@ async function renderWatchlist() {
 // ══════════════════════════════════════════════════════════════
 // SCREENER — today's top gainers / losers / most active (Alpaca)
 // ══════════════════════════════════════════════════════════════
-let screenerView = 'gainers';
+let screenerView = 'targets';
 
 function setScreenerView(view) {
   screenerView = view;
@@ -2025,8 +2566,120 @@ function setScreenerView(view) {
   loadScreener();
 }
 
+// ── ACTIVIST TARGET SCREENER ─────────────────────────────────
+// Everything else in Signal Desk is REACTIVE — it fires after a filing
+// hits EDGAR. This is the proactive half: score names against the profile
+// activists actually target, per the academic literature and the campaigns
+// themselves — sustained underperformance vs the market, price well off
+// highs, cheap earnings multiple, healthy gross margins but weak net
+// margins (an operational-fix lever a board challenger can pull), and a
+// market cap big enough to matter but small enough to influence. A high
+// score does NOT mean an activist is coming — it means that if one looks
+// at this space, this is the kind of name they look at first.
+const TARGET_UNIVERSE_CAP = 14;
+
+async function loadTargetScreener() {
+  const body = document.getElementById('screener-body');
+  if (!ALPACA_PROXY_URL) {
+    body.innerHTML = `<div class="status-box error">The target screener needs the proxy Worker connected — set <code>ALPACA_PROXY_URL</code> near the top of this file's script.</div>`;
+    return;
+  }
+
+  // Universe: your watchlist + every ticker the signal streams have already
+  // surfaced. Deliberately not market-wide — scoring 8,000 tickers from a
+  // browser isn't feasible or polite; scoring the names already on your
+  // radar is where the decision actually gets made.
+  const tickers = new Set(getWatchlist());
+  allSignals.forEach(s => { if (s.ticker && s.direction !== 'sell') tickers.add(s.ticker); });
+  const universe = [...tickers].slice(0, TARGET_UNIVERSE_CAP);
+
+  if (!universe.length) {
+    body.innerHTML = `<div class="status-box">No names to score yet — the target screener works over your watchlist plus tickers surfaced by the signal streams. Add tickers to your Watchlist, or let the other tabs load first, then refresh.</div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scoring ${universe.length} names against the activist-target profile (1Y relative performance, drawdown, valuation, margin gap, size)…</div>`;
+
+  const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 365);
+  const getBars = sym => fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(sym)}&start=${ymd(start)}&end=${ymd(end)}`)
+    .then(r => r.json()).then(d => (d.bars && d.bars.length >= 30) ? d.bars : null).catch(() => null);
+  const getFundamentals = sym => fetch(`${ALPACA_PROXY_URL}/fundamentals?symbol=${encodeURIComponent(sym)}`)
+    .then(r => r.json().then(d => r.ok ? d : null)).catch(() => null);
+
+  const spyBars = await getBars('SPY');
+  const spyRet = spyBars ? ((spyBars[spyBars.length - 1].c - spyBars[0].c) / spyBars[0].c) * 100 : null;
+
+  const scored = [];
+  const CHUNK = 4;
+  for (let i = 0; i < universe.length; i += CHUNK) {
+    await Promise.all(universe.slice(i, i + CHUNK).map(async sym => {
+      const [bars, fund] = await Promise.all([getBars(sym), getFundamentals(sym)]);
+      if (!bars) return; // no price history → can't score at all
+      const last = bars[bars.length - 1].c;
+      const ret = ((last - bars[0].c) / bars[0].c) * 100;
+      const hi = Math.max(...bars.map(b => b.h));
+      const offHigh = ((hi - last) / hi) * 100;
+
+      const clamp = (v, lo, hiV) => Math.max(lo, Math.min(hiV, v));
+      // Component scores (max 100 total) — each one is a documented piece
+      // of the activist-target profile, weighted toward the two the
+      // campaign studies find most predictive: relative underperformance
+      // and drawdown.
+      const underperf = spyRet != null ? clamp(spyRet - ret, 0, 40) : 0;          // 40 pts
+      const drawdown = clamp(offHigh * 0.5, 0, 20);                               // 20 pts
+      const pe = fund && fund.peTTM;
+      const valuation = pe != null && pe > 0 ? (pe < 14 ? 15 : pe < 18 ? 8 : 0) : 0; // 15 pts
+      const gm = fund && fund.grossMarginTTM, nm = fund && fund.netProfitMarginTTM;
+      const marginGap = gm != null && nm != null ? (gm >= 35 && nm < 8 ? 15 : gm >= 35 && nm < 15 ? 8 : 0) : 0; // 15 pts
+      const mcapM = fund && fund.marketCapM;
+      const size = mcapM != null ? (mcapM >= 500 && mcapM <= 20000 ? 10 : 0) : 0; // 10 pts
+
+      scored.push({
+        sym, ret, offHigh, pe, gm, nm, mcapM,
+        hasFund: !!fund && fund.error !== 'not_configured',
+        score: underperf + drawdown + valuation + marginGap + size,
+        parts: { underperf, drawdown, valuation, marginGap, size }
+      });
+    }));
+  }
+
+  if (!scored.length) {
+    body.innerHTML = `<div class="status-box error">Couldn't score any of the ${universe.length} names — the /bars route may be failing. Check the Worker deployment.</div>`;
+    return;
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const anyNoFund = scored.some(s => !s.hasFund);
+
+  body.innerHTML = `
+    <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px;font-size:12px">
+      <strong>Activist-target profile scores</strong> for the ${scored.length} names on your radar (watchlist + signal-surfaced tickers). Components: underperformance vs SPY over 1Y (up to 40), drawdown off the 52-wk high (20), cheap P/E (15), gross-vs-net margin gap — the "an operator could fix this" lever (15), and influenceable size, $500M–$20B (10).
+      A high score means the name FITS THE PROFILE activists hunt in — it is not a prediction that any activist will show up.${anyNoFund ? ' Some rows are missing fundamentals — set <code>FINNHUB_API_KEY</code> on the Worker (free key) to score valuation/margins/size; those rows are price-only for now.' : ''} Not investment advice.
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Score</th><th>Symbol</th><th>1Y Return</th><th>vs SPY</th><th>Off 52w High</th><th>P/E</th><th>Gross → Net Margin</th><th>Mkt Cap</th><th></th></tr></thead>
+      <tbody>
+        ${scored.map(s => {
+          const vsSpy = spyRet != null ? s.ret - spyRet : null;
+          return `
+          <tr${s.score >= 50 ? ' style="background:rgba(57,255,143,0.05)"' : ''}>
+            <td style="white-space:nowrap"><span class="cc-score-bar" style="display:inline-block;vertical-align:middle;width:56px"><span class="cc-score-fill" style="display:block;width:${Math.round(s.score)}%"></span></span> <span class="mono" style="font-weight:700;color:${s.score >= 50 ? 'var(--teal)' : 'var(--text-dim)'}">${Math.round(s.score)}</span></td>
+            <td>${tickerLink(s.sym)}</td>
+            <td class="num price-change ${s.ret >= 0 ? 'up' : 'down'}">${s.ret >= 0 ? '+' : ''}${s.ret.toFixed(1)}%</td>
+            <td class="num price-change ${vsSpy != null && vsSpy >= 0 ? 'up' : 'down'}">${vsSpy != null ? (vsSpy >= 0 ? '+' : '') + vsSpy.toFixed(1) + '%' : '—'}</td>
+            <td class="num">${s.offHigh.toFixed(0)}%</td>
+            <td class="num">${s.pe != null && s.pe > 0 ? s.pe.toFixed(1) : '—'}</td>
+            <td class="num">${s.gm != null ? s.gm.toFixed(0) + '% → ' + (s.nm != null ? s.nm.toFixed(0) + '%' : '—') : '—'}</td>
+            <td class="num">${s.mcapM != null ? fmtMoney(s.mcapM * 1e6) : '—'}</td>
+            <td><button class="chart-jump-btn" onclick="switchTab('charts'); loadChart('${escHtml(s.sym)}')">chart →</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
 function loadScreener() {
   const body = document.getElementById('screener-body');
+  if (screenerView === 'targets') return loadTargetScreener();
 
   if (!ALPACA_PROXY_URL) {
     body.innerHTML = `
@@ -2099,7 +2752,9 @@ function loadScreener() {
 loadInsiderTrades();
 loadSchedule13();
 loadInstitutions();
-loadCongressTrades();
+loadCampaigns();
+renderCampaigns();      // stored campaign history renders instantly, before feeds return
+renderCommandCenter();  // confluence board fills in as each stream lands
 renderTickerTape();
 </script>
 </body>
