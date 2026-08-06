@@ -470,9 +470,23 @@ async function loadFundDetail() {
       const increased = changed.filter(h => h.pctChange > 0).sort((a,b) => b.pctChange - a.pctChange);
       const decreased = changed.filter(h => h.pctChange < 0).sort((a,b) => a.pctChange - b.pctChange);
 
-      html += `<div class="section-title">🟢 New Positions <span class="section-count">${newPositions.length}</span></div>`;
-      html += newPositions.length
-        ? `<div class="change-grid">${newPositions.slice(0,12).map(h => renderChangeCard('new', h.issuer, fmtShares(h.shares) + ' shares · ' + fmtMoney(h.valueUsd))).join('')}</div>`
+      // The 13F-cloning research is specific about WHICH new positions carry
+      // information: the ones that are LARGE relative to the fund's own book
+      // (conviction), from managers who run concentrated portfolios. So new
+      // positions are ranked by % of book, not raw dollars, and anything the
+      // manager sized at 3%+ of the whole portfolio gets flagged.
+      const bookForPct = current.totalValue || 1;
+      const newRanked = [...newPositions]
+        .map(h => ({ ...h, pctOfBook: (h.valueUsd / bookForPct) * 100 }))
+        .sort((a, b) => b.pctOfBook - a.pctOfBook);
+      const isConcentrated = current.holdings.length > 0 &&
+        (current.holdings.slice(0, 5).reduce((s, h) => s + h.valueUsd, 0) / bookForPct) >= 0.4;
+
+      html += `<div class="section-title">🟢 New Positions <span class="section-count">${newRanked.length} — ranked by conviction (% of book)${isConcentrated ? ' · <span style="color:var(--teal)">★ concentrated manager — new positions here carry the most signal</span>' : ''}</span></div>`;
+      html += newRanked.length
+        ? `<div class="change-grid">${newRanked.slice(0,12).map(h => renderChangeCard('new', h.issuer,
+            (h.pctOfBook >= 3 ? '<span style="color:var(--teal);font-weight:700">★ ' + h.pctOfBook.toFixed(1) + '% of book — conviction bet</span> · ' : h.pctOfBook.toFixed(1) + '% of book · ')
+            + fmtShares(h.shares) + ' shares · ' + fmtMoney(h.valueUsd))).join('')}</div>`
         : `<div class="empty-note">No new positions opened since the prior filing.</div>`;
 
       html += `<div class="section-title">🔴 Closed Positions <span class="section-count">${closedPositions.length}</span></div>`;
