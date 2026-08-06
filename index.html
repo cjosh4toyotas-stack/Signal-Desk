@@ -244,7 +244,14 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── WATCHLIST CARDS (institutions) ───────────────────────── */
-.fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+/* Wide cards (2-up on desktop, 1-up below ~1000px) so the positions table
+   fits without columns wrapping or margins overflowing. */
+.fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr)); gap: 16px; }
+.fund-card { min-width: 0; overflow: hidden; }
+.issuer-cell {
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--text-dim);
+}
 .fund-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
 .fund-card-rich { grid-column: span 1; }
 .fund-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 2px; letter-spacing: -0.2px; }
@@ -575,12 +582,45 @@ const FUND_WATCHLIST = [
   { name: 'Trian Fund Management (Peltz)', cik: '0001345471' },
   { name: 'ValueAct Holdings', cik: '0001418814' },
   { name: 'Third Point (Loeb)', cik: '0001040273' },
-  // Quants — thousands of algorithmic positions, individually less meaningful
-  { name: 'Bridgewater Associates', cik: '0001350694' },
-  { name: 'Renaissance Technologies', cik: '0001037389' }
+  // Quants — thousands of algorithmic positions, individually less
+  // meaningful. quant:true keeps their cards but stops them from ever
+  // generating Top Signals entries — a RenTech "new position" is a model
+  // output, not a conviction bet.
+  { name: 'Bridgewater Associates', cik: '0001350694', quant: true },
+  { name: 'Renaissance Technologies', cik: '0001037389', quant: true }
 ];
 
 let allSignals = [];
+
+// ── SIGNAL MEMORY ────────────────────────────────────────────
+// The live feeds only cover a rolling window (24h of Form 4s, the current
+// 13D feed page), so without memory the board reset itself every visit —
+// it behaved like a notification stream instead of a record. Every signal
+// that ever earns a spot is persisted here and merged back in on load;
+// the freshness decay in renderSignals is what ages it out (hard cap 90
+// days), not the accident of whether the feed still shows it.
+const SIG_MEM_KEY = 'sd_signal_history_v1';
+function sigId(s) { return [s.source, s.tag, s.entity, s.detail].join('|'); }
+let memorySignals = (sdMemGet(SIG_MEM_KEY, []) || []).filter(s =>
+  s && s.time && (Date.now() - new Date(s.time).getTime()) / 86400e3 <= 90);
+
+// Live signals win over remembered copies of themselves; remembered
+// signals fill in everything the feeds no longer show.
+function combinedSignals() {
+  const liveIds = new Set(allSignals.map(sigId));
+  return allSignals.concat(memorySignals.filter(m => !liveIds.has(sigId(m))));
+}
+
+function persistSignals() {
+  const byId = {};
+  for (const s of combinedSignals()) {
+    if ((s.valueUsd || 0) > 0 && s.time) byId[sigId(s)] = s;
+  }
+  memorySignals = Object.values(byId)
+    .sort((a, b) => new Date(b.time) - new Date(a.time))
+    .slice(0, 400); // localStorage discipline — oldest fall off past 400
+  sdMemSet(SIG_MEM_KEY, memorySignals);
+}
 
 // ══════════════════════════════════════════════════════════════
 // TABS
@@ -658,9 +698,11 @@ function saveTickerCache() {
 let cusipQueue = [];
 let cusipQueueTimer = null;
 const pendingCusipResolvers = {};
+const cusipNames = {}; // cusip -> issuer name, for the Worker's SEC name-match fallback
 
-function resolveCusipToTicker(cusip) {
+function resolveCusipToTicker(cusip, issuerName) {
   if (!cusip) return Promise.resolve(null);
+  if (issuerName && !cusipNames[cusip]) cusipNames[cusip] = issuerName;
   if (cusip in tickerCache) return Promise.resolve(tickerCache[cusip]);
   return new Promise(resolve => {
     (pendingCusipResolvers[cusip] = pendingCusipResolvers[cusip] || []).push(resolve);
@@ -669,14 +711,16 @@ function resolveCusipToTicker(cusip) {
   });
 }
 
+// Resolution now runs through the Worker's /cusip-batch route: KV-cached
+// server-side, OpenFIGI second, SEC company-name matching third. This is
+// what makes the ticker column actually populate — browser-side anonymous
+// OpenFIGI was rate-limited into rendering "—" for everything. Direct
+// OpenFIGI remains only as a fallback when the Worker is unreachable.
 const cusipAttempts = {};
 async function flushCusipQueue() {
   cusipQueueTimer = null;
   if (!cusipQueue.length) return;
-  const batch = cusipQueue.splice(0, 10);
-  const jobs = batch.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }));
-  // cacheable=true only for answers OpenFIGI actually gave — a rate limit or
-  // network failure must never be remembered as "this CUSIP has no ticker".
+  const batch = cusipQueue.splice(0, 20);
   const settle = (cusip, ticker, cacheable) => {
     if (cacheable) tickerCache[cusip] = ticker;
     (pendingCusipResolvers[cusip] || []).forEach(fn => fn(ticker));
@@ -684,33 +728,49 @@ async function flushCusipQueue() {
   };
   let hadError = false;
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
-    const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(jobs) });
+    if (!ALPACA_PROXY_URL) throw new Error('no worker');
+    const items = batch.map(c => c + '~' + encodeURIComponent(cusipNames[c] || '')).join(',');
+    const res = await fetch(`${ALPACA_PROXY_URL}/cusip-batch?items=${items}`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const results = await res.json();
-    batch.forEach((cusip, i) => {
-      const entry = results[i];
-      let ticker = null;
-      if (entry && Array.isArray(entry.data) && entry.data.length) {
-        const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
-        ticker = match.ticker || null;
-      }
-      settle(cusip, ticker, true);
-    });
-    saveTickerCache();
-  } catch (err) {
-    // Almost always OpenFIGI rate-limiting (anonymous tier: 25 req/min).
-    // Requeue for retry rather than settling; only give up — uncached, so
-    // the next page load tries again — after repeated failures.
-    hadError = true;
+    const data = await res.json();
     for (const cusip of batch) {
-      cusipAttempts[cusip] = (cusipAttempts[cusip] || 0) + 1;
-      if (cusipAttempts[cusip] <= 2) cusipQueue.push(cusip);
-      else settle(cusip, null, false);
+      // Worker answers are authoritative (it already tried every layer) —
+      // cache them, nulls included, so they never re-fetch.
+      settle(cusip, data.tickers?.[cusip] ?? null, !!data.tickers && cusip in data.tickers);
+    }
+    saveTickerCache();
+  } catch (workerErr) {
+    // Worker unreachable — fall back to direct anonymous OpenFIGI (10 max
+    // per request on that side; requeue the rest).
+    const sub = batch.slice(0, 10);
+    batch.slice(10).forEach(c => cusipQueue.push(c));
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (OPENFIGI_API_KEY) headers['X-OPENFIGI-APIKEY'] = OPENFIGI_API_KEY;
+      const res = await fetch(OPENFIGI_URL, { method: 'POST', headers, body: JSON.stringify(sub.map(cusip => ({ idType: 'ID_CUSIP', idValue: cusip }))) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const results = await res.json();
+      sub.forEach((cusip, i) => {
+        const entry = results[i];
+        let ticker = null;
+        if (entry && Array.isArray(entry.data) && entry.data.length) {
+          const match = entry.data.find(d => d.exchCode === 'US') || entry.data[0];
+          ticker = match.ticker || null;
+        }
+        settle(cusip, ticker, true);
+      });
+      saveTickerCache();
+    } catch (err) {
+      // Rate limit or network failure — retry a couple of times, never cache.
+      hadError = true;
+      for (const cusip of sub) {
+        cusipAttempts[cusip] = (cusipAttempts[cusip] || 0) + 1;
+        if (cusipAttempts[cusip] <= 2) cusipQueue.push(cusip);
+        else settle(cusip, null, false);
+      }
     }
   }
-  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, hadError ? 10000 : 3000);
+  if (cusipQueue.length) cusipQueueTimer = setTimeout(flushCusipQueue, hadError ? 10000 : 1200);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1301,7 +1361,7 @@ async function loadInstitutions() {
         ${changeBadges}
 
         <table class="data-table mini-table">
-          <thead><tr><th>Ticker</th><th>Dir</th><th>Value</th><th>Status</th><th>Snapshot</th></tr></thead>
+          <thead><tr><th>Ticker</th><th>Company</th><th>Dir</th><th>Value</th><th>% Book</th><th>Δ</th></tr></thead>
           <tbody>
             ${topStocks.length ? topStocks.map(h => {
               const key = h.cusip + '|' + h.direction;
@@ -1312,12 +1372,13 @@ async function loadInstitutions() {
               return `
               <tr data-cusip="${escHtml(h.cusip)}" data-issuer="${escHtml(h.issuer)}">
                 <td class="ticker-cell mono">···</td>
+                <td class="issuer-cell" title="${escHtml(h.issuer)}">${escHtml(h.issuer)}</td>
                 <td><span class="ls-chip ${dirClass[h.direction]}" style="padding:2px 6px;font-size:9px">${dirAbbr[h.direction]}</span></td>
                 <td class="num mono">${fmtMoney(h.valueUsd)}</td>
+                <td class="num mono" style="color:var(--text-dim)">${bookValue ? ((h.valueUsd / bookValue) * 100).toFixed(1) + '%' : '—'}</td>
                 <td>${statusHtml}</td>
-                <td class="mono" style="font-size:10px;color:var(--text-muted)">${escHtml(filingDate)}</td>
               </tr>`;
-            }).join('') : `<tr><td colspan="5" class="empty-note">No positions reported.</td></tr>`}
+            }).join('') : `<tr><td colspan="6" class="empty-note">No positions reported.</td></tr>`}
           </tbody>
         </table>
 
@@ -1328,48 +1389,46 @@ async function loadInstitutions() {
       `;
       anySuccess = true;
 
-      // Top Signals entries — actual stake changes with dollar sizes (new
-      // stakes, full exits, big adds/trims), not "a filing happened". Only
-      // possible when a prior 13F exists to diff against.
-      if (prior) {
-        const estPrice = h => h.shares ? h.valueUsd / h.shares : 0;
+      // Top Signals entries — CONVICTION events only, not "a filing
+      // happened". The 13F-cloning literature is specific about what
+      // predicts anything: NEW positions and full EXITs that are large
+      // relative to the fund's own book, from concentrated managers.
+      // So: adds/trims stay on the card badges but never make Top Signals;
+      // quant funds (thousands of algorithmic positions) never generate
+      // signals at all; and a new stake must be both ≥ $25M and ≥ 0.75% of
+      // the fund's book — a rounding-error position at Berkshire's scale is
+      // not a signal, however many dollars it is.
+      if (prior && !fund.quant) {
         const candidates = [];
         current.holdings.forEach(h => {
-          const p = prior.byCusip[h.cusip];
-          if (!p) {
-            candidates.push({ dir: 'buy', cusip: h.cusip, value: h.valueUsd,
-              detail: `Opened a NEW ${fmtMoney(h.valueUsd)} stake in ${h.issuer} (${fmtShares(h.shares)} shares)` });
-          } else if (h.shares > p.shares) {
-            const dv = (h.shares - p.shares) * estPrice(h);
-            candidates.push({ dir: 'buy', cusip: h.cusip, value: dv,
-              detail: `Added ${fmtShares(h.shares - p.shares)} shares of ${h.issuer} (~${fmtMoney(dv)}) — position now ${fmtMoney(h.valueUsd)}` });
-          } else if (h.shares < p.shares) {
-            const dv = (p.shares - h.shares) * estPrice(h);
-            candidates.push({ dir: 'sell', cusip: h.cusip, value: dv,
-              detail: `Trimmed ${fmtShares(p.shares - h.shares)} shares of ${h.issuer} (~${fmtMoney(dv)}) — position now ${fmtMoney(h.valueUsd)}` });
+          if (!prior.byCusip[h.cusip]) {
+            const pctBook = longValue ? (h.valueUsd / longValue) * 100 : 0;
+            candidates.push({ dir: 'buy', cusip: h.cusip, issuer: h.issuer, value: h.valueUsd, pctBook,
+              detail: `Opened a NEW ${fmtMoney(h.valueUsd)} stake in ${h.issuer} — ${pctBook.toFixed(1)}% of the fund's book (${fmtShares(h.shares)} shares)` });
           }
         });
         prior.holdings.forEach(p => {
           if (!current.byCusip[p.cusip]) {
-            candidates.push({ dir: 'sell', cusip: p.cusip, value: p.valueUsd,
-              detail: `EXITED entirely — sold the full ${fmtMoney(p.valueUsd)} position in ${p.issuer}` });
+            const pctBook = prior.totalValue ? (p.valueUsd / prior.totalValue) * 100 : 0;
+            candidates.push({ dir: 'sell', cusip: p.cusip, issuer: p.issuer, value: p.valueUsd, pctBook,
+              detail: `EXITED entirely — sold the full ${fmtMoney(p.valueUsd)} position in ${p.issuer} (was ${pctBook.toFixed(1)}% of the book)` });
           }
         });
         candidates
-          .filter(c => c.value >= 10e6) // ignore sub-$10M noise
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 5)
+          .filter(c => c.value >= 25e6 && c.pctBook >= 0.75) // conviction bar: size AND share of book
+          .sort((a, b) => b.pctBook - a.pctBook)             // rank by conviction, not raw dollars
+          .slice(0, 3)
           .forEach(c => {
             const sig = {
-              source: 'institution', tag: 'HEDGE FUND', entity: fund.name,
+              source: 'institution', tag: c.dir === 'buy' ? 'FUND NEW STAKE' : 'FUND EXIT', entity: fund.name,
               detail: `${c.detail} · 13F filed ${filingDate} (quarter-end snapshot, up to 45-day lag)`,
               direction: c.dir, time: filingDate, link: detailUrl,
-              valueUsd: c.value, sortValue: c.value, ticker: null
+              valueUsd: c.value, sortValue: c.value * (1 + c.pctBook / 10), ticker: null
             };
             allSignals.push(sig);
             // Ticker resolution is async + optional — the signal renders
             // fine without it, and gains a chart button once resolved.
-            resolveCusipToTicker(c.cusip).then(t => { if (t) { sig.ticker = t; renderSignals(); } });
+            resolveCusipToTicker(c.cusip, c.issuer).then(t => { if (t) { sig.ticker = t; renderSignals(); } });
           });
       }
       return card;
@@ -1408,7 +1467,7 @@ async function loadInstitutions() {
     const cusip = row.dataset.cusip;
     const issuer = row.dataset.issuer || '';
     const cell = row.querySelector('.ticker-cell');
-    resolveCusipToTicker(cusip).then(ticker => {
+    resolveCusipToTicker(cusip, issuer).then(ticker => {
       if (!cell) return;
       cell.innerHTML = ticker ? tickerLink(ticker, issuer) : '<span style="color:var(--text-muted)">—</span>';
     });
@@ -1627,10 +1686,10 @@ function computeConfluence() {
     return Math.pow(0.5, age / halfLifeDays);
   };
 
-  // Stream 1+2: everything already in Top Signals (insider buys/clusters,
-  // fund stake changes). Dollar value → log points, so a $10M add doesn't
-  // drown a $600K CFO cluster.
-  for (const s of allSignals) {
+  // Stream 1+2: everything on the Top Signals board — live AND remembered
+  // (insider buys/clusters, fund stake changes). Dollar value → log
+  // points, so a $10M add doesn't drown a $600K CFO cluster.
+  for (const s of combinedSignals()) {
     if (!(s.valueUsd > 0) || s.direction === 'sell') continue;
     const key = s.ticker ? 'T:' + s.ticker : null;
     if (!key) continue;
@@ -1675,7 +1734,7 @@ function computeConfluence() {
   // matches — that's how a 13D on "ACME CORP" stacks with insider buys on
   // ticker ACME resolved from Form 4s (which carry both name and symbol).
   const nameOfTicker = {};
-  for (const s of allSignals) {
+  for (const s of combinedSignals()) {
     if (s.ticker && s.detail) {
       const m = insiderPurchases.find(p => p.symbol === s.ticker);
       if (m) nameOfTicker[normName(m.issuerName)] = 'T:' + s.ticker;
@@ -2027,8 +2086,9 @@ function renderSignals() {
   // identical entries first (value is NOT summed: it's one transaction),
   // then rank by freshness-weighted size. The collapsed row expands to
   // every underlying filing.
+  persistSignals(); // remember everything currently on the board across visits
   const ranked = groupDuplicateFilings(
-    allSignals.filter(s => (s.valueUsd || 0) > 0),
+    combinedSignals().filter(s => (s.valueUsd || 0) > 0),
     s => `${s.source}|${s.tag}|${s.entity}|${s.detail}`
   )
     .map(s => ({ ...s, ageDays: signalAgeDays(s) }))
@@ -2045,7 +2105,7 @@ function renderSignals() {
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Largest disclosed transactions, ranked by dollar value <em>weighted by freshness</em> — recent trades rise, old ones fade, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Sources: hedge-fund stake changes diffed from live 13F filings (quarterly by law, so they dominate for weeks after each filing season then decay), open-market insider buys and sells (grants, RSU vesting and other compensation excluded), and congressional trades of $250K+. Duplicate joint filings are shown once — expand "filed ×N" to see each one.
+      Conviction events, ranked by size <em>weighted by freshness</em> — recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
