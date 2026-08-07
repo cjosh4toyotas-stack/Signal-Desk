@@ -136,6 +136,7 @@ export default {
     if (url.pathname === '/insider-feed') return handleInsiderFeed(url);
     if (url.pathname === '/form4-batch') return handleForm4Batch(url);
     if (url.pathname === '/cusip-batch') return handleCusipBatch(url, env, ctx);
+    if (url.pathname === '/sched13-history') return handleSched13History(env);
     if (url.pathname === '/sec-proxy') return handleSecProxy(url);
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
     if (url.pathname === '/alerts-status') return handleAlertsStatus(env);
@@ -569,6 +570,120 @@ const ALERT_ACTIVIST_ROSTER = [
   'blackwells', 'soros', 'appaloosa', 'baupost', 'duquesne', 'berkshire'
 ];
 
+// ══════════════════════════════════════════════════════════════
+// 13D HISTORY — the fix for "Opportunities never shows anything"
+// ══════════════════════════════════════════════════════════════
+// Known-activist 13Ds happen a few times a week across the whole market;
+// EDGAR's live feed only shows the last day or two. So a page that reads
+// the live feed alone shows an empty ★ view on most days and forgets last
+// week's Elliott filing entirely. Two mechanisms fix that:
+//   1. The 30-minute alert cron already parses the 13D feed — it now also
+//      appends everything it sees to a rolling KV history (12 months).
+//   2. /sched13-history additionally backfills ~12 months of each roster
+//      activist's 13D filings from EDGAR full-text search (efts.sec.gov),
+//      a few activists per request until done. efts results include the
+//      subject company's TICKER, which the atom feed never provides.
+const SCHED13_HISTORY_KEY = 'sched13-history';
+const SCHED13_BACKFILL_KEY = 'sched13-backfill-state';
+const SCHED13_HISTORY_CAP = 900;
+const SCHED13_MAX_AGE_DAYS = 365;
+const BACKFILL_PER_CALL = 10; // efts queries per invocation, well under the 50-subrequest cap
+
+// Search phrases for the backfill — full names, so a text search hits the
+// filer block of their filings without drowning in incidental mentions.
+const BACKFILL_QUERIES = [
+  'Elliott Investment Management', 'Starboard Value', 'Icahn Carl C',
+  'Trian Fund Management', 'ValueAct', 'Pershing Square', 'Third Point',
+  'JANA Partners', 'Ancora', 'Engaged Capital', 'Sarissa Capital',
+  'Sachem Head', 'Corvex Management', 'Land & Buildings', 'Legion Partners',
+  'Politan Capital', 'Browning West', 'Engine Capital', 'Barington Capital',
+  'Irenic Capital', 'Impactive Capital', 'Blackwells Capital',
+  'Appaloosa', 'Baupost', 'Berkshire Hathaway', 'Duquesne Family Office',
+  'Soros Fund Management',
+];
+
+// "ACME CORP (ACME) (CIK 0001234567)" -> { name, tickers[], cik }
+function parseDisplayName(dn) {
+  const m = String(dn || '').match(/^(.*?)(?:\s+\(([A-Z][A-Z0-9.,\s-]{0,40})\))?\s+\(CIK\s+(\d+)\)\s*$/);
+  if (!m) return { name: String(dn || '').trim(), tickers: [], cik: null };
+  const tickers = m[2] ? m[2].split(',').map(t => t.trim()).filter(t => /^[A-Z][A-Z0-9.-]{0,9}$/.test(t)) : [];
+  return { name: m[1].trim(), tickers, cik: m[3] };
+}
+
+function eftsHitToRecord(src) {
+  const names = (src.display_names || []).map(parseDisplayName);
+  // The subject company is the entry that carries a ticker; if none does
+  // (private/foreign subjects), fall back to the first entry.
+  const subject = names.find(n => n.tickers.length) || names[0] || { name: '', tickers: [], cik: null };
+  const filers = names.filter(n => n !== subject).map(n => n.name);
+  const acc = String(src.adsh || '').replace(/-/g, '');
+  if (!acc || !subject.cik) return null;
+  return {
+    acc,
+    form: String(src.file_type || src.form || '').toUpperCase(),
+    filed: src.file_date || '',
+    link: `https://www.sec.gov/Archives/edgar/data/${parseInt(subject.cik, 10)}/${acc}/`,
+    subject: subject.name,
+    tickers: subject.tickers,
+    filers,
+  };
+}
+
+async function mergeSched13History(env, records) {
+  if (!env.SIGNAL_KV || !records.length) return;
+  const existing = (await env.SIGNAL_KV.get(SCHED13_HISTORY_KEY, 'json')) || [];
+  const byAcc = new Map(existing.map(r => [r.acc, r]));
+  for (const rec of records) {
+    if (!rec || !rec.acc) continue;
+    const prev = byAcc.get(rec.acc);
+    if (!prev) byAcc.set(rec.acc, rec);
+    else if (rec.tickers && rec.tickers.length && !(prev.tickers || []).length) prev.tickers = rec.tickers;
+  }
+  const cutoff = Date.now() - SCHED13_MAX_AGE_DAYS * 86400e3;
+  const merged = [...byAcc.values()]
+    .filter(r => r.filed && new Date(r.filed).getTime() >= cutoff)
+    .sort((a, b) => new Date(b.filed) - new Date(a.filed))
+    .slice(0, SCHED13_HISTORY_CAP);
+  await env.SIGNAL_KV.put(SCHED13_HISTORY_KEY, JSON.stringify(merged));
+}
+
+async function handleSched13History(env) {
+  if (!env.SIGNAL_KV) {
+    return json({ error: 'SIGNAL_KV binding missing — redeploy with wrangler.toml present' }, 501);
+  }
+  const state = (await env.SIGNAL_KV.get(SCHED13_BACKFILL_KEY, 'json')) || { idx: 0, done: false };
+
+  // Advance the backfill a few activists per call until complete. Each
+  // efts query returns that filer's most recent ~10 Schedule 13D filings —
+  // for funds that file a handful of times a year, that IS their year.
+  if (!state.done) {
+    const batch = BACKFILL_QUERIES.slice(state.idx, state.idx + BACKFILL_PER_CALL);
+    const collected = [];
+    for (const q of batch) {
+      try {
+        const u = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent('"' + q + '"')}&forms=${encodeURIComponent('SCHEDULE 13D')}`;
+        const res = await fetch(u, { headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/json' } });
+        if (!res.ok) continue; // skip this activist this round; a later full re-run can be forced by deleting the state key
+        const data = await res.json();
+        for (const hit of (data.hits?.hits || [])) {
+          const rec = eftsHitToRecord(hit._source || {});
+          if (rec) collected.push(rec);
+        }
+      } catch { /* one bad query shouldn't stall the whole backfill */ }
+    }
+    if (collected.length) await mergeSched13History(env, collected);
+    state.idx = Math.min(state.idx + BACKFILL_PER_CALL, BACKFILL_QUERIES.length);
+    state.done = state.idx >= BACKFILL_QUERIES.length;
+    await env.SIGNAL_KV.put(SCHED13_BACKFILL_KEY, JSON.stringify(state));
+  }
+
+  const records = (await env.SIGNAL_KV.get(SCHED13_HISTORY_KEY, 'json')) || [];
+  return json({
+    records,
+    backfill: { done: state.done, idx: state.idx, total: BACKFILL_QUERIES.length },
+  });
+}
+
 async function runAlertScan(env) {
   const status = { ran: new Date().toISOString(), scanned: 0, alerted: 0, errors: [] };
   try {
@@ -599,6 +714,18 @@ async function runAlertScan(env) {
       byAcc.set(acc, rec);
     }
     status.scanned = byAcc.size;
+
+    // Persist everything this scan saw into the rolling 13D history — this
+    // is what lets the frontend's ★ Opportunities view accumulate 24/7
+    // instead of only knowing whatever the live feed shows at page load.
+    try {
+      await mergeSched13History(env, [...byAcc.values()].map(r => ({
+        acc: r.acc, form: r.form, filed: r.filed, link: r.link,
+        subject: r.subject, tickers: [], filers: r.filers,
+      })));
+    } catch (err) {
+      status.errors.push('history merge failed: ' + err.message);
+    }
 
     for (const rec of byAcc.values()) {
       const filerNames = rec.filers.join(' | ').toLowerCase();
