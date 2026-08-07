@@ -426,8 +426,8 @@ footer a { color: var(--amber); }
   <div class="tab-panel" id="tab-watch13d">
     <div class="chart-controls">
       <div class="chart-range-btns">
-        <button class="range-btn" data-sched13="OPP" onclick="setSched13Filter('OPP')">★ Opportunities</button>
-        <button class="range-btn active" data-sched13="D" onclick="setSched13Filter('D')">13D (activist)</button>
+        <button class="range-btn active" data-sched13="OPP" onclick="setSched13Filter('OPP')">★ Opportunities</button>
+        <button class="range-btn" data-sched13="D" onclick="setSched13Filter('D')">13D (activist)</button>
         <button class="range-btn" data-sched13="NEW" onclick="setSched13Filter('NEW')">New stakes only</button>
         <button class="range-btn" data-sched13="G" onclick="setSched13Filter('G')">13G (passive)</button>
         <button class="range-btn" data-sched13="ALL" onclick="setSched13Filter('ALL')">All</button>
@@ -582,6 +582,20 @@ const FUND_WATCHLIST = [
   { name: 'Trian Fund Management (Peltz)', cik: '0001345471' },
   { name: 'ValueAct Holdings', cik: '0001418814' },
   { name: 'Third Point (Loeb)', cik: '0001040273' },
+  { name: 'JANA Partners (Rosenstein)', cik: '0001159159' },
+  { name: 'Sachem Head Capital (Ferguson)', cik: '0001582090' },
+  { name: 'Corvex Management (Meister)', cik: '0001535472' },
+  { name: 'Engaged Capital (Welling)', cik: '0001559771' },
+  { name: 'Sarissa Capital (Denner)', cik: '0001577524' },
+  { name: 'Ancora Advisors', cik: '0001446114' },
+  // Concentrated growth / conviction managers
+  { name: 'Lone Pine Capital (Mandel)', cik: '0001061165' },
+  { name: 'Tiger Global Management (Coleman)', cik: '0001167483' },
+  { name: 'Coatue Management (Laffont)', cik: '0001135730' },
+  { name: 'Viking Global (Halvorsen)', cik: '0001103804' },
+  { name: 'TCI Fund Management (Hohn)', cik: '0001647251' },
+  { name: 'Dalal Street (Pabrai)', cik: '0001549575' },
+  { name: 'Himalaya Capital (Li Lu)', cik: '0001709323' },
   // Quants — thousands of algorithmic positions, individually less
   // meaningful. quant:true keeps their cards but stops them from ever
   // generating Top Signals entries — a RenTech "new position" is a model
@@ -1704,15 +1718,17 @@ function computeConfluence() {
     if (s.context && !entry.details.includes(s.context)) entry.details.push('↳ ' + s.context);
   }
 
-  // Stream 3: live 13D activity (keyed by company name — the feed has no
-  // ticker; if a signal above shares the name, keys merge below).
+  // Stream 3: 13D activity, live + Worker history. History records carry
+  // the subject's ticker (from EDGAR full-text search), so those key
+  // directly by ticker and stack cleanly with insider/fund signals;
+  // ticker-less feed records key by company name and merge below.
   for (const r of sched13Filings) {
     if (r.tier < 2) continue;
-    const key = 'N:' + normName(r.subject);
+    const key = r.ticker ? 'T:' + r.ticker : 'N:' + normName(r.subject);
     let pts = r.tier * 2.2 * fresh(r.filed, 21);
-    add(key, r.subject, 'sched13', pts,
+    add(key, r.ticker || r.subject, 'sched13', pts,
       `${r.form === 'SCHEDULE 13D' ? 'New 13D' : '13D amendment'} by ${r.filers.slice(0, 2).join(', ')}${r.pct ? ' — ' + r.pct.toFixed(1) + '% stake' : ''}${r.pctDelta != null ? ` (${r.pctDelta > 0 ? '+' : ''}${r.pctDelta.toFixed(1)}pt vs prior)` : ''}`,
-      r.link, null);
+      r.link, r.ticker || null);
     const entry = byKey[key];
     const badge = r.escalation ? { cls: 'b-escalation', text: '⚠ 13G→13D' }
       : r.activist ? { cls: 'b-13d', text: '★ ACTIVIST 13D' }
@@ -1800,7 +1816,8 @@ const SCHED13_FEED = type =>
   `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=${encodeURIComponent(type)}&company=&dateb=&owner=include&count=100&output=atom`;
 
 let sched13Filings = [];
-let sched13Filter = 'D';
+let sched13Filter = 'OPP'; // opportunities-first: land on the view that matters
+let sched13HistoryMeta = null;
 
 // Known activist / high-conviction filers. A 13D from one of these names is
 // a fundamentally different event than one from a company founder or family
@@ -1923,7 +1940,39 @@ async function loadSchedule13() {
         }
       } catch (e) { /* one feed failing shouldn't kill the other */ }
     }
-    if (!anyFeed) throw new Error('Neither 13D nor 13G feed was reachable');
+    // ── SERVER-SIDE HISTORY ──────────────────────────────────
+    // The live feed above only covers the last day or two — activist 13Ds
+    // are rare enough that on most days it contains zero, which made the
+    // ★ Opportunities view look permanently empty. The Worker fixes that
+    // two ways: its 30-minute cron stores every 13D it scans into KV, and
+    // /sched13-history backfills the last 12 months of roster-activist
+    // filings from EDGAR full-text search. Merged here by accession.
+    let historyMeta = null;
+    try {
+      if (ALPACA_PROXY_URL) {
+        const hres = await fetch(`${ALPACA_PROXY_URL}/sched13-history`);
+        if (hres.ok) {
+          const hist = await hres.json();
+          for (const h of (hist.records || [])) {
+            if (!h.acc) continue;
+            const existing = byAcc.get(h.acc);
+            if (!existing) {
+              byAcc.set(h.acc, {
+                acc: h.acc, form: (h.form || '').toUpperCase(), filed: h.filed,
+                link: h.link, subject: h.subject || '', filers: h.filers || [],
+                ticker: (h.tickers && h.tickers[0]) || null, fromHistory: true
+              });
+            } else if (h.tickers && h.tickers.length && !existing.ticker) {
+              existing.ticker = h.tickers[0]; // efts records know the subject's ticker; the atom feed doesn't
+            }
+          }
+          historyMeta = hist.backfill || null;
+        }
+      }
+    } catch (e) { /* history is additive — the live feed alone still works */ }
+    sched13HistoryMeta = historyMeta;
+
+    if (!anyFeed && !byAcc.size) throw new Error('Neither 13D nor 13G feed was reachable');
     sched13Filings = [...byAcc.values()].sort((a, b) => new Date(b.filed) - new Date(a.filed));
     sched13Filings.forEach(r => { r.activist = sched13Activist(r); });
     applySched13Memory(); // must run before tiering — escalation sets tier 4
@@ -1970,6 +2019,11 @@ function renderSched13() {
       Live <strong>Schedule 13D / 13G</strong> filings — the disclosure required within days of any investor crossing 5% ownership of a public company.
       A <strong>NEW 13D</strong> is the classic activist opening move; <strong>13D AMEND</strong> means an existing holder changed their position or intentions; 13G is the same threshold with passive intent.
       Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong> — most other raw 13D filings are founders and family holders, not campaigns. "★ Opportunities" shows only those. Stake % is parsed from each filing as it loads. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
+      <div class="empty-note" style="margin-top:8px">${sched13HistoryMeta
+        ? (sched13HistoryMeta.done
+          ? 'Depth: the live feed plus the Worker\'s stored scan history and a 12-month backfill of roster-activist 13Ds from EDGAR full-text search — ★ Opportunities goes back months, not hours.'
+          : `Depth: backfilling roster-activist history from EDGAR full-text search… ${sched13HistoryMeta.idx || 0}/${sched13HistoryMeta.total || '?'} activists indexed — reload in a minute for the rest.`)
+        : 'Depth: live feed only right now — the Worker\'s /sched13-history route wasn\'t reachable (deploy the latest worker for months of activist history).'}</div>
     </div>
     ${rows.length ? `
     <table class="data-table">
@@ -1979,13 +2033,13 @@ function renderSched13() {
           <tr${r.tier >= 2 ? ' style="background:rgba(57,255,143,0.05)"' : ''}>
             <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
             <td style="white-space:nowrap">${sched13Badge(r.form)}${r.escalation ? ' <span class="badge-pill badge-esc" title="This filer previously held this company passively (13G) and has now filed an ACTIVE 13D — the classic passive-turns-hostile escalation">13G→13D</span>' : ''}${r.activist ? ` <span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)" title="Filer matches the known-activist roster">★ ${escHtml(r.activist.toUpperCase())}</span>` : ''}</td>
-            <td style="font-weight:600">${escHtml(r.subject || '—')}</td>
+            <td style="font-weight:600">${escHtml(r.subject || '—')}${r.ticker ? ' · ' + tickerLink(r.ticker, r.subject) : ''}</td>
             <td style="color:var(--text-dim)">${escHtml(r.filers.join(', ') || '—')}</td>
             <td class="num mono" id="s13pct-${r.acc}" style="color:var(--amber)">${r.form.startsWith('SCHEDULE 13D') ? '…' : '—'}</td>
             <td style="white-space:nowrap"><a href="${escHtml(r.link)}" target="_blank" rel="noopener" class="fund-link">Filing →</a>${sched13FundLink(r) ? ` <a href="${sched13FundLink(r)}" class="fund-link" title="This filer is on your Hedge Funds tab — see their full quarterly book">13F book →</a>` : ''}</td>
           </tr>`).join('')}
       </tbody>
-    </table>` : '<div class="status-box">No filings match this filter in the current feed window — the ★ view can be empty on quiet days, since known-activist 13Ds are rare events. Try "13D (activist)" or "All".</div>'}
+    </table>` : '<div class="status-box">No filings match this filter yet. If the depth note above says "live feed only", deploy the latest Worker — the ★ view draws on months of stored and backfilled activist history once /sched13-history is live.</div>'}
   `;
   enrichSched13Percents(rows);
 }
