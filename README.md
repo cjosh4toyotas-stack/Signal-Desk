@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/30798401/README.md)
+[README.md](https://github.com/user-attachments/files/30809614/README.md)
 # Signal-Desk
 
 Public Disclosure Tracker — surfaces what corporate insiders, hedge funds, and activists are legally required to disclose, stacks the streams that agree, and remembers what the rolling feeds forget.
