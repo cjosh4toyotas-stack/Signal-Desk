@@ -22,7 +22,7 @@
 
   const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789$%+▲▼ABCDEFHKLMNPRSTX';
   const FONT_SIZE = 14;        // px
-  const FRAME_MS = 33;         // ~30fps
+  const FRAME_MS = 45;         // ~22fps — slow enough to catch each glyph
   const FADE_ALPHA = 0.09;     // trail persistence (higher = shorter trails)
   const RAIN_ALPHA = 0.30;     // overall subtlety of the effect
   const HEAD_CHANCE = 0.012;   // odds a column's lead glyph flashes amber
@@ -103,7 +103,7 @@
       // preserve existing columns on resize; seed new ones at random heights
       for (let i = cols; i < newCols; i++) {
         drops[i] = Math.random() * (window.innerHeight / FONT_SIZE);
-        speeds[i] = 0.6 + Math.random() * 0.8; // varied fall speeds
+        speeds[i] = 0.28 + Math.random() * 0.27; // slow, varied fall — each symbol dwells ~0.1s
       }
       cols = newCols;
 
