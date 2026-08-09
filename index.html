@@ -407,6 +407,7 @@ footer a { color: var(--amber); }
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="signals" onclick="switchTab('signals')">Top Signals</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
     <button class="tab-btn" data-tab="watch13d" onclick="switchTab('watch13d')">13D Watch</button>
     <button class="tab-btn" data-tab="campaigns" onclick="switchTab('campaigns')">Campaigns</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
@@ -420,6 +421,13 @@ footer a { color: var(--amber); }
   <div class="tab-panel active" id="tab-signals">
     <div id="signals-body" class="signal-list">
       <div class="status-box"><div class="spinner"></div>Gathering signals across all three sources…</div>
+    </div>
+  </div>
+
+  <!-- HISTORY — signals still in range -->
+  <div class="tab-panel" id="tab-history">
+    <div id="history-body">
+      <div class="status-box"><div class="spinner"></div>Checking which remembered signals are still in range…</div>
     </div>
   </div>
 
@@ -647,6 +655,7 @@ function switchTab(name) {
   if (name === 'watchlist') { renderWatchlist(); renderTickerTape(); }
   if (name === 'screener') loadScreener();
   if (name === 'campaigns') renderCampaigns();
+  if (name === 'history') renderHistory();
 }
 
 function setFreshness(id, label, status, detail) {
@@ -2136,6 +2145,103 @@ function fmtAge(days) {
   return Math.round(days / 30) + 'mo ago';
 }
 
+// ── HISTORY — signals still in range ─────────────────────────────────
+// A great signal that ran +40% is a story; one still sitting at the
+// disclosure price is a live setup. This tab keeps every remembered
+// buy-side signal (insider buys, clusters, congressional buys) visible
+// for up to 90 days — but ONLY while price hasn't escaped more than
+// RUNAWAY_PCT past where it stood at disclosure. Names that run away
+// drop off; what remains is the watchlist of setups still on offer,
+// with the live since-disclosure move so you can watch them evolve.
+const HISTORY_RUNAWAY_PCT = 10;      // beyond +10% = the edge has left
+const HISTORY_CACHE_KEY = 'sd_since_disclosure_v1';
+const HISTORY_CACHE_TTL = 6 * 3600 * 1000;
+
+async function fetchSinceDisclosure(ticker, iso) {
+  const key = ticker + '|' + iso.slice(0, 10);
+  const cache = sdMemGet(HISTORY_CACHE_KEY, {}) || {};
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < HISTORY_CACHE_TTL) return hit;
+  try {
+    const res = await fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(ticker)}&start=${iso.slice(0, 10)}&end=${ymd(new Date())}`);
+    const data = await res.json();
+    if (!res.ok || !data.bars || !data.bars.length) return null;
+    const from = data.bars[0].o, last = data.bars[data.bars.length - 1].c;
+    const out = { at: Date.now(), from, last, pct: from ? ((last - from) / from) * 100 : null };
+    cache[key] = out;
+    const keys = Object.keys(cache);
+    if (keys.length > 250) keys.sort((a, b) => cache[a].at - cache[b].at).slice(0, keys.length - 250).forEach(k => delete cache[k]);
+    sdMemSet(HISTORY_CACHE_KEY, cache);
+    return out;
+  } catch { return null; }
+}
+
+async function renderHistory() {
+  const body = document.getElementById('history-body');
+  if (!body) return;
+  if (!ALPACA_PROXY_URL) {
+    body.innerHTML = '<div class="status-box">The History tab needs the Alpaca proxy Worker for since-disclosure prices.</div>';
+    return;
+  }
+  // newest copy of each remembered buy signal with a ticker, ≤90d old
+  const byId = {};
+  for (const s of combinedSignals()) {
+    if (s.direction !== 'buy' || !s.ticker || !s.time) continue;
+    const age = signalAgeDays(s);
+    if (age > SIGNAL_MAX_AGE_DAYS) continue;
+    const id = sigId(s);
+    if (!byId[id] || new Date(s.time) > new Date(byId[id].time)) byId[id] = { ...s, ageDays: age };
+  }
+  const candidates = Object.values(byId).sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 60);
+  if (!candidates.length) {
+    body.innerHTML = '<div class="status-box">Nothing remembered yet — buy signals will accumulate here as the board sees them, and stay while they remain in range.</div>';
+    return;
+  }
+  body.innerHTML = `<div class="status-box"><div class="spinner"></div>Pricing ${candidates.length} remembered signals against their disclosure dates…</div>`;
+
+  // limited-concurrency fetch of since-disclosure moves
+  const results = [];
+  let idx = 0;
+  async function workOne() {
+    while (idx < candidates.length) {
+      const s = candidates[idx++];
+      const px = await fetchSinceDisclosure(s.ticker, s.time);
+      if (px && px.pct != null) results.push({ ...s, px });
+    }
+  }
+  await Promise.all([workOne(), workOne(), workOne(), workOne()]);
+
+  const inRange = results.filter(r => r.px.pct <= HISTORY_RUNAWAY_PCT).sort((a, b) => a.px.pct - b.px.pct);
+  const escaped = results.length - inRange.length;
+
+  if (!inRange.length) {
+    body.innerHTML = `<div class="status-box">All ${results.length} remembered buy signals have run past +${HISTORY_RUNAWAY_PCT}% since disclosure — nothing left in range right now.</div>`;
+    return;
+  }
+  body.innerHTML = `
+    <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
+      Remembered buy signals still <strong>in range</strong> — price hasn't moved more than +${HISTORY_RUNAWAY_PCT}% past the disclosure date, so the setup the filer saw is still roughly on offer. Sorted deepest discount first; tracked up to ${SIGNAL_MAX_AGE_DAYS} days; names that escape +${HISTORY_RUNAWAY_PCT}% drop off automatically${escaped ? ` (${escaped} hidden for exactly that reason)` : ''}. Since-disclosure prices refresh every 6 hours. Watching a setup is research — nothing here is investment advice.
+    </div>
+    ${inRange.map(s => `
+    <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
+      <div class="ping-wrap"><div class="ping buy" style="width:12px;height:12px"></div></div>
+      <div class="signal-main">
+        <div class="signal-entity">${escHtml(s.entity)}</div>
+        <div class="signal-detail">${escHtml(s.detail)}</div>
+        <div class="ctx-note" style="margin-top:4px">disclosed @ $${s.px.from.toFixed(2)} → now $${s.px.last.toFixed(2)}</div>
+        ${valuationChipHtml(s.ticker) ? `<div style="margin-top:5px">${valuationChipHtml(s.ticker)}</div>` : ''}
+        ${s.link ? `<div style="margin-top:6px"><a class="fund-link" href="${escHtml(s.link)}" target="_blank" rel="noopener">View filing →</a></div>` : ''}
+      </div>
+      <div class="signal-tag ${s.source === 'insider' ? 'insider' : 'institution'}">${escHtml(s.tag)}</div>
+      <button class="chart-jump-btn" onclick="switchTab('charts'); loadChart('${escHtml(s.ticker)}')">chart →</button>
+      <div class="signal-meta">
+        <span style="font-weight:700;font-size:14px;color:${s.px.pct <= 0 ? 'var(--teal)' : 'var(--amber)'}">${s.px.pct >= 0 ? '+' : ''}${s.px.pct.toFixed(1)}%</span><br>
+        <span style="color:var(--text-muted)">since filing · ${fmtAge(s.ageDays)}</span>
+      </div>
+    </div>`).join('')}
+  `;
+}
+
 // ── VALUATION OVERLAY — EV/EBITDA from SEC XBRL (fundamentals.js) ──
 // A cluster buy at 7x EV/EBITDA and one at 40x are not the same signal:
 // insider buying has historically been most informative in cheap names.
@@ -2944,6 +3050,12 @@ renderTickerTape();
     { h: 'Trust, but <span>verify</span>.', a: '\u2014 Russian proverb' },
     { h: 'Follow the <span>money</span>.', a: '' },
     { h: 'Watch the hands, not the <span>mouth</span>.', a: '' },
+    { h: 'There are no facts, only <span>interpretations</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'Convictions are more dangerous enemies of truth than <span>lies</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'The most common stupidity is forgetting what you are trying to <span>do</span>.', a: '\u2014 after Nietzsche' },
+    { h: 'He who has a why can bear almost any <span>how</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'What does not kill me makes me <span>stronger</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'The snake which cannot cast its skin has to <span>die</span>.', a: '\u2014 Friedrich Nietzsche' },
   ];
   const title = document.getElementById('hero-title');
   const attrib = document.getElementById('hero-attrib');
@@ -2965,7 +3077,7 @@ renderTickerTape();
       title.style.opacity = '1';
       if (attrib) { attrib.style.transition = 'opacity .5s ease'; attrib.style.opacity = '1'; }
     }, 520);
-  }, 22000);
+  }, 50000);
 })();
 </script>
 <script src="matrix-rain.js"></script>
