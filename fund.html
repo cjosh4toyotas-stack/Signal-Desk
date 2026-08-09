@@ -137,6 +137,8 @@ footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-
   Data sourced directly from SEC EDGAR (data.sec.gov and sec.gov/Archives). Values are as SEC requires them to be reported for filings since Jan 2023 — rounded to the nearest whole dollar. Ticker mapping via OpenFIGI; price history via Alpaca, when configured — both optional and never required for the core holdings data.
 </footer>
 
+<script src="matrix-rain.js"></script>
+<script src="fundamentals.js"></script>
 <script>
 const CORS_PROXIES = [
   // Own Worker first (defined below; evaluated lazily at fetch time) —
@@ -352,22 +354,39 @@ function initPriceContext(filingDateStr) {
       const sparkCell = row.querySelector('.spark-cell');
       const chgCell = row.querySelector('.chg-cell');
 
+      const evCell = row.querySelector('.ev-cell');
+
       resolveCusipToTicker(cusip, issuer).then(ticker => {
         if (tickerCell) {
           tickerCell.innerHTML = ticker
             ? `<a class="ticker" href="stock.html?symbol=${encodeURIComponent(ticker)}&issuer=${encodeURIComponent(issuer)}">${escHtml(ticker)}</a>`
             : '<span style="color:var(--text-muted)">—</span>';
         }
-        if (!alpacaProxyConfigured || !filingISO) return;
-        if (!ticker) { if (chgCell) chgCell.textContent = '—'; return; }
+        if (!alpacaProxyConfigured || !filingISO) { if (evCell) evCell.textContent = '—'; return; }
+        if (!ticker) {
+          if (chgCell) chgCell.textContent = '—';
+          if (evCell) evCell.textContent = '—';
+          return;
+        }
         return fetchBarsSince(ticker, filingISO).then(bars => {
-          if (!bars) { if (chgCell) chgCell.textContent = '—'; return; }
+          if (!bars) {
+            if (chgCell) chgCell.textContent = '—';
+            // No price bars — still try fundamentals with a freshly fetched close
+            if (evCell && window.SDFundamentals) {
+              SDFundamentals.fetchLatestClose(ticker).then(px => SDFundamentals.fillEvCell(evCell, ticker, px));
+            } else if (evCell) evCell.textContent = '—';
+            return;
+          }
           const pct = ((bars[bars.length - 1].c - bars[0].o) / bars[0].o) * 100;
           if (chgCell) {
             chgCell.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
             chgCell.style.color = pct >= 0 ? 'var(--teal)' : 'var(--rose)';
           }
           if (sparkCell) sparkCell.innerHTML = buildSparklineSvg(bars, pct);
+          // EV/EBITDA — reuses the sparkline's latest close as the price input
+          if (evCell && window.SDFundamentals) {
+            SDFundamentals.fillEvCell(evCell, ticker, bars[bars.length - 1].c);
+          } else if (evCell) evCell.textContent = '—';
         });
       });
     });
@@ -552,7 +571,7 @@ async function loadFundDetail() {
       <table class="data-table">
         <thead><tr>
           <th>Ticker</th><th>Issuer</th><th>Direction</th><th>Shares</th><th>Value</th><th>% of Book</th><th>Status</th><th>Snapshot</th>
-          ${alpacaProxyConfigured ? '<th>Chart</th><th title="Price change from filing date to today">Since Filing</th>' : ''}
+          ${alpacaProxyConfigured ? '<th>Chart</th><th title="Price change from filing date to today">Since Filing</th><th title="Enterprise value ÷ latest fiscal-year EBITDA, computed from SEC XBRL company facts. * = debt or cash not disclosed under standard tags, EV approximate.">EV/EBITDA</th>' : ''}
         </tr></thead>
         <tbody>
           ${allCurrent.map(h => {
@@ -580,6 +599,7 @@ async function loadFundDetail() {
               ${alpacaProxyConfigured ? `
                 <td><div class="spark-cell"></div></td>
                 <td class="num mono chg-cell price-pulse">…</td>
+                <td class="num mono ev-cell" style="font-size:12px">…</td>
               ` : ''}
             </tr>
           `;}).join('')}
