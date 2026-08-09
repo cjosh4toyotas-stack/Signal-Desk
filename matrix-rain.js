@@ -27,6 +27,8 @@
   const RAIN_ALPHA = 0.30;     // overall subtlety of the effect
   const HEAD_CHANCE = 0.012;   // odds a column's lead glyph flashes amber
   const RESET_CHANCE = 0.975;  // odds a column keeps falling past the bottom
+  const CONTENT_PAD = 28;      // px of clear space beyond the content column
+  const EDGE_FADE = 90;        // px over which rain fades in near the content edge
 
   function cssVar(name, fallback) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -49,6 +51,15 @@
     canvas.style.cssText = 'position:fixed;inset:0;z-index:-1;pointer-events:none;';
     document.body.insertBefore(canvas, document.body.firstChild);
 
+    // Guarantee readability: give the content column and footer a solid
+    // page-colored backing so the rain can never show through transparent
+    // table rows or card gaps — belt and suspenders alongside the
+    // exclusion-zone math below. Visually identical to before (same color),
+    // it just stops being see-through.
+    const style = document.createElement('style');
+    style.textContent = 'main, footer { background: var(--bg, #060706); position: relative; }';
+    document.head.appendChild(style);
+
     // The canvas becomes the page background, so the page itself must be
     // transparent for it to show through. Painting --bg onto the canvas
     // first keeps the visible result identical for any non-rain pixels.
@@ -57,6 +68,27 @@
 
     const ctx = canvas.getContext('2d');
     let cols = 0, drops = [], speeds = [];
+
+    // ── content exclusion zone ─────────────────────────────────────────
+    // The rain stays OUT of the main content column so data is never read
+    // through falling glyphs. Rain lives in the side margins, fading in
+    // softly as it moves away from the content edge.
+    let exLeft = -1, exRight = -1;
+    function measureContent() {
+      const el = document.querySelector('main') || document.querySelector('.container');
+      if (!el) { exLeft = -1; exRight = -1; return; }
+      const r = el.getBoundingClientRect();
+      exLeft = r.left - CONTENT_PAD;
+      exRight = r.right + CONTENT_PAD;
+    }
+
+    // 0 inside the content zone → ramps up to 1 over EDGE_FADE px outside it
+    function columnAlpha(x) {
+      if (exLeft < 0) return 1;
+      if (x >= exLeft && x <= exRight) return 0;
+      const dist = x < exLeft ? exLeft - x : x - exRight;
+      return Math.min(1, dist / EDGE_FADE);
+    }
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -92,15 +124,18 @@
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
       for (let i = 0; i < cols; i++) {
-        const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
         const x = i * FONT_SIZE;
+        const a = columnAlpha(x);
+        if (a <= 0) continue; // inside the content column — leave it clean
+
+        const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
         const y = drops[i] * FONT_SIZE;
 
         if (Math.random() < HEAD_CHANCE) {
           // occasional amber flash — a "tick" in the tape
-          ctx.fillStyle = `rgba(${amber[0]},${amber[1]},${amber[2]},${RAIN_ALPHA + 0.15})`;
+          ctx.fillStyle = `rgba(${amber[0]},${amber[1]},${amber[2]},${(RAIN_ALPHA + 0.15) * a})`;
         } else {
-          ctx.fillStyle = `rgba(${teal[0]},${teal[1]},${teal[2]},${RAIN_ALPHA})`;
+          ctx.fillStyle = `rgba(${teal[0]},${teal[1]},${teal[2]},${RAIN_ALPHA * a})`;
         }
         ctx.fillText(ch, x, y);
 
@@ -110,8 +145,9 @@
     }
 
     document.addEventListener('visibilitychange', () => { running = !document.hidden; });
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', () => { resize(); measureContent(); });
     resize();
+    measureContent();
     requestAnimationFrame(frame);
   }
 
