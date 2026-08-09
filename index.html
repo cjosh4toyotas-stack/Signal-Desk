@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Signal Desk — Public Disclosure Tracker</title>
+<title>Signal Desk</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -374,7 +374,7 @@ footer a { color: var(--amber); }
     </div>
     <div>
       <div class="brand-text">Signal Desk</div>
-      <div class="brand-sub">PUBLIC DISCLOSURE TRACKER</div>
+      <div class="brand-sub">EVERY POSITION IS A CONFESSION</div>
     </div>
   </div>
   <div class="freshness-row" id="freshness-row"></div>
@@ -383,7 +383,8 @@ footer a { color: var(--amber); }
 <main>
   <div class="hero">
     <div>
-      <div class="hero-title">Public disclosures. Private-grade <span>signal</span>.</div>
+      <div class="hero-title" id="hero-title" style="transition:opacity .5s ease">People lie. Positions <span>don’t</span>.</div>
+      <div id="hero-attrib" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);letter-spacing:1px;min-height:16px;margin-top:6px"></div>
       <div class="hero-sub">Every trade here comes from a disclosure the law already requires — corporate insiders, hedge funds, and activist campaigns. This surfaces what's public, stacks the streams that agree, and remembers what the feeds forget. It doesn't execute anything.</div>
     </div>
     <div class="hero-note">Not investment advice. Disclosure lag varies by source — see freshness badges above.</div>
@@ -2920,6 +2921,52 @@ loadCampaigns();
 renderCampaigns();      // stored campaign history renders instantly, before feeds return
 renderCommandCenter();  // confluence board fills in as each stream lands
 renderTickerTape();
+</script>
+<script>
+// ── HERO APHORISM ROTATION ────────────────────────────────────────────
+// The desk speaks in revealed preference: proverbs, Art of War, tape
+// wisdom. Random opener each visit, slow rotation after. Sourced from
+// the public canon; the theme of every line is the same — commitments
+// tell the truth that mouths won't.
+(function () {
+  const Q = [
+    { h: 'People lie. Positions <span>don\u2019t</span>.', a: '' },
+    { h: 'Talk is cheap. <span>Filings aren\u2019t</span>.', a: '' },
+    { h: 'Money talks. <span>Bullshit walks</span>.', a: '' },
+    { h: 'Actions speak louder than <span>words</span>.', a: '' },
+    { h: 'All warfare is based on <span>deception</span>.', a: '\u2014 Sun Tzu, The Art of War' },
+    { h: 'To know your enemy, you must become your <span>enemy</span>.', a: '\u2014 Sun Tzu' },
+    { h: 'Sit atop the mountain. Watch the tigers <span>fight</span>.', a: '\u2014 Chinese proverb' },
+    { h: 'Talk does not cook <span>rice</span>.', a: '\u2014 Chinese proverb' },
+    { h: 'When the tide goes out, you see who swam <span>naked</span>.', a: '\u2014 after Warren Buffett' },
+    { h: 'Be greedy when others are <span>fearful</span>.', a: '\u2014 Warren Buffett' },
+    { h: 'The market is never wrong. <span>Opinions are</span>.', a: '\u2014 Jesse Livermore' },
+    { h: 'Trust, but <span>verify</span>.', a: '\u2014 Russian proverb' },
+    { h: 'Follow the <span>money</span>.', a: '' },
+    { h: 'Watch the hands, not the <span>mouth</span>.', a: '' },
+  ];
+  const title = document.getElementById('hero-title');
+  const attrib = document.getElementById('hero-attrib');
+  if (!title) return;
+  let i = Math.floor(Math.random() * Q.length);
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function show(idx) {
+    title.innerHTML = Q[idx].h;
+    if (attrib) attrib.textContent = Q[idx].a;
+  }
+  show(i);
+  setInterval(() => {
+    i = (i + 1) % Q.length;
+    if (reduced) { show(i); return; }
+    title.style.opacity = '0';
+    if (attrib) attrib.style.opacity = '0';
+    setTimeout(() => {
+      show(i);
+      title.style.opacity = '1';
+      if (attrib) { attrib.style.transition = 'opacity .5s ease'; attrib.style.opacity = '1'; }
+    }, 520);
+  }, 22000);
+})();
 </script>
 <script src="matrix-rain.js"></script>
 </body>
