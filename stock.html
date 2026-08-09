@@ -174,6 +174,8 @@ footer { text-align: center; padding: 40px 24px; color: var(--text-muted); font-
   13F filings only disclose long equity and options positions on a quarterly lag — true short sales are never made public anywhere. Not investment advice.
 </footer>
 
+<script src="matrix-rain.js"></script>
+<script src="fundamentals.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════
 // CONFIG — keep in sync with index.html / fund.html
@@ -545,9 +547,11 @@ window.addEventListener('resize', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// FUNDAMENTALS — via the optional /fundamentals Worker route (Finnhub).
-// Alpaca has no fundamentals data at all, so this gracefully explains
-// itself rather than failing silently when the route isn't configured.
+// FUNDAMENTALS — SEC XBRL first (keyless, via the Worker's /sec-proxy),
+// Finnhub /fundamentals route as an optional fallback if a key is ever
+// configured. EBITDA is computed as OperatingIncomeLoss + D&A from the
+// company's latest ANNUAL filing and labeled with that fiscal year.
+// EV = (price × shares outstanding) + total debt − cash.
 // ══════════════════════════════════════════════════════════════
 async function loadFundamentals() {
   const body = document.getElementById('fundamentals-body');
@@ -556,10 +560,54 @@ async function loadFundamentals() {
     return;
   }
   try {
+    const price = await SDFundamentals.fetchLatestClose(SYMBOL);
+    const m = await SDFundamentals.getMetrics(SYMBOL, price);
+
+    if (!m || (m.ebitda == null && m.opInc == null && m.revenue == null && m.shares == null)) {
+      // SEC XBRL had nothing usable — fall back to the Finnhub route if configured
+      return loadFundamentalsFinnhub(body);
+    }
+
+    const fyLabel = m.periodLabel || 'latest FY';
+    const B = SDFundamentals.fmtBig;
+    const rows = [
+      ['Market Cap', m.marketCap != null ? B(m.marketCap) : null],
+      ['EV/EBITDA', m.evEbitda != null ? m.evEbitda.toFixed(1) + '×' + (m.evApprox ? '*' : '') : null],
+      [`EBITDA (${fyLabel})`, m.ebitda != null ? B(m.ebitda) : null],
+      ['EBITDA Margin', m.ebitdaMargin != null ? m.ebitdaMargin.toFixed(1) + '%' : null],
+      [`Revenue (${fyLabel})`, m.revenue != null ? B(m.revenue) : null],
+      [`Op. Income (${fyLabel})`, m.opInc != null ? B(m.opInc) : null],
+      [`D&amp;A (${fyLabel})`, m.dna != null ? B(m.dna) : null],
+      ['Total Debt', m.debt != null ? B(m.debt) : null],
+      ['Cash &amp; Equiv.', m.cash != null ? B(m.cash) : null],
+      ['Shares Out.', m.shares != null ? (m.shares / 1e6).toFixed(1) + 'M' : null],
+    ].filter(([, v]) => v !== null);
+
+    body.innerHTML = `<div class="stat-row">${rows.map(([label, val]) => `
+      <div class="stat-card"><div class="stat-value">${val}</div><div class="stat-label">${label}</div></div>
+    `).join('')}</div>`
+    + `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+        EBITDA computed as operating income + depreciation &amp; amortization from SEC XBRL filings —
+        ${m.isTTM ? 'trailing twelve months through ' + escHtml(m.fyEnd || '') + ' (latest reported quarter)' : 'latest annual filing' + (m.fyEnd ? ', period ended ' + escHtml(m.fyEnd) : '')}.
+        ${m.evEbitda == null && m.ebitda != null && m.ebitda <= 0 ? 'EV/EBITDA omitted — EBITDA is not positive.' : ''}
+        ${m.evApprox ? '* Debt or cash not disclosed under standard XBRL tags — enterprise value is approximate.' : ''}
+        Not meaningful for banks, insurers, and most REITs.
+      </div>`;
+    document.getElementById('fundamentals-note').textContent = m.isTTM ? 'via SEC XBRL · TTM' : 'via SEC XBRL company facts';
+  } catch (err) {
+    return loadFundamentalsFinnhub(body, err);
+  }
+}
+
+// Legacy Finnhub path — only produces data if FINNHUB_API_KEY is set on the Worker.
+async function loadFundamentalsFinnhub(body, secErr) {
+  try {
     const res = await fetch(`${ALPACA_PROXY_URL}/fundamentals?symbol=${encodeURIComponent(SYMBOL)}`);
     const data = await res.json();
     if (!res.ok || data.error) {
-      const msg = data.message || data.error || 'Request failed';
+      const msg = secErr
+        ? `Couldn't load fundamentals from SEC XBRL (${secErr.message}) and the Finnhub fallback isn't configured.`
+        : `No SEC XBRL fundamentals found for ${SYMBOL} — common for foreign issuers, funds, and very recent listings.`;
       body.innerHTML = `<div class="status-box">${escHtml(msg)}</div>`;
       return;
     }
@@ -568,15 +616,13 @@ async function loadFundamentals() {
       ['EBITDA', data.ebitdaM != null ? fmtMoney(data.ebitdaM * 1e6) : null],
       ['P/E (TTM)', data.peTTM != null ? data.peTTM.toFixed(1) + '×' : null],
       ['EPS (TTM)', data.epsTTM != null ? '$' + data.epsTTM.toFixed(2) : null],
-      ['Revenue / Share (TTM)', data.revenuePerShareTTM != null ? '$' + data.revenuePerShareTTM.toFixed(2) : null],
       ['Gross Margin (TTM)', data.grossMarginTTM != null ? data.grossMarginTTM.toFixed(1) + '%' : null],
       ['Net Margin (TTM)', data.netProfitMarginTTM != null ? data.netProfitMarginTTM.toFixed(1) + '%' : null],
       ['52-Week Range', (data.week52Low != null && data.week52High != null) ? `$${data.week52Low.toFixed(2)} – $${data.week52High.toFixed(2)}` : null],
       ['Beta', data.beta != null ? data.beta.toFixed(2) : null],
     ].filter(([, v]) => v !== null);
-
     if (!rows.length) {
-      body.innerHTML = `<div class="status-box">Finnhub returned no fundamentals for ${escHtml(SYMBOL)} — this can happen for smaller or non-US-listed names on the free tier.</div>`;
+      body.innerHTML = `<div class="status-box">No fundamentals available for ${escHtml(SYMBOL)} from either SEC XBRL or Finnhub.</div>`;
       return;
     }
     body.innerHTML = `<div class="stat-row">${rows.map(([label, val]) => `
