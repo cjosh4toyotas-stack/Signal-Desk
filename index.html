@@ -532,6 +532,7 @@ footer a { color: var(--amber); }
   Data sourced from SEC EDGAR (data.sec.gov). 13F data carries a legally mandated reporting delay of up to 45 days — see header badges for freshness. Signal history (13G→13D escalations, stake deltas, campaign timelines, insider baselines) accumulates locally in this browser the longer you use the page.
 </footer>
 
+<script src="fundamentals.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════
 // CONFIG — data sources. Update these if a source moves.
@@ -2134,6 +2135,53 @@ function fmtAge(days) {
   return Math.round(days / 30) + 'mo ago';
 }
 
+// ── VALUATION OVERLAY — EV/EBITDA from SEC XBRL (fundamentals.js) ──
+// A cluster buy at 7x EV/EBITDA and one at 40x are not the same signal:
+// insider buying has historically been most informative in cheap names.
+// Buy-side rows get the company's live multiple as a chip, and the score
+// gets a modest valuation multiplier — modest on purpose: it tilts ties,
+// it doesn't let a cheap multiple rescue a stale or tiny trade.
+const signalValuation = {};       // ticker -> EV/EBITDA multiple | null
+const valuationPending = {};      // ticker -> true while fetching
+let valuationInFlight = 0, valuationDirty = false;
+
+function valuationBoost(s) {
+  if (s.direction !== 'buy' || !s.ticker) return 1;
+  const m = signalValuation[s.ticker];
+  if (m == null) return 1;
+  if (m < 8) return 1.3;
+  if (m < 12) return 1.15;
+  if (m <= 25) return 1;
+  return 0.85;
+}
+
+function valuationChipHtml(t) {
+  const m = signalValuation[t];
+  if (m == null) return '';   // unresolved or not computable — stay quiet
+  const color = m < 10 ? 'var(--teal)' : m > 25 ? 'var(--rose)' : 'var(--text-muted)';
+  return `<span title="Enterprise value / EBITDA, computed live from SEC XBRL filings (TTM where available)" style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:${color};border:1px solid var(--border);border-radius:4px;padding:1px 6px">${m.toFixed(1)}\u00d7 EV/EBITDA</span>`;
+}
+
+function enrichSignalValuations(ranked) {
+  if (!window.SDFundamentals || !ALPACA_PROXY_URL) return;
+  const tickers = [...new Set(ranked.filter(x => x.ticker && x.direction === 'buy').map(x => x.ticker))];
+  for (const t of tickers) {
+    if (t in signalValuation || valuationPending[t]) continue;
+    valuationPending[t] = true;
+    valuationInFlight++;
+    SDFundamentals.fetchLatestClose(t)
+      .then(px => SDFundamentals.getMetrics(t, px))
+      .then(m => { signalValuation[t] = (m && m.evEbitda != null) ? m.evEbitda : null; })
+      .catch(() => { signalValuation[t] = null; })
+      .then(() => {
+        delete valuationPending[t];
+        valuationInFlight--; valuationDirty = true;
+        // one quiet re-rank after the whole batch settles, not per ticker
+        if (valuationInFlight === 0 && valuationDirty) { valuationDirty = false; renderSignals(); }
+      });
+  }
+}
+
 function renderSignals() {
   const body = document.getElementById('signals-body');
   // The same trade filed by N joint filers is one signal, not N — group
@@ -2149,17 +2197,18 @@ function renderSignals() {
     .filter(s => s.ageDays <= SIGNAL_MAX_AGE_DAYS)
     // sortValue carries the quality weights (insider role, cluster premium,
     // first-buy bonus); valueUsd stays the honest displayed dollar figure.
-    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) }))
+    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) * valuationBoost(s) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 25);
   renderCommandCenter();
+  enrichSignalValuations(ranked); // async EV/EBITDA chips + one quiet re-rank when the batch settles
   if (!ranked.length) {
     body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
     return;
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Conviction events, ranked by size <em>weighted by freshness</em> — recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one.
+      Conviction events, ranked by size <em>weighted by freshness</em> — recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
@@ -2168,6 +2217,7 @@ function renderSignals() {
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
         ${s.context ? `<div class="ctx-note" style="margin-top:4px">↳ ${escHtml(s.context)}</div>` : ''}
+        ${s.ticker && s.direction === 'buy' && valuationChipHtml(s.ticker) ? `<div style="margin-top:5px">${valuationChipHtml(s.ticker)}</div>` : ''}
         ${s.count > 1 ? `
         <div style="margin-top:6px">
           <button class="chart-jump-btn" data-closed-label="filed ×${s.count} — show all ▾" onclick="toggleSigFilings('sig-filings-${i}', this)">filed ×${s.count} — show all ▾</button>
