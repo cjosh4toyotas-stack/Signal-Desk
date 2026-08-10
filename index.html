@@ -3120,32 +3120,54 @@ renderTickerTape();
 </script>
 <script>
 // ── HERO APHORISM ROTATION ────────────────────────────────────────────
-// The desk speaks in revealed preference: proverbs, Art of War, tape
-// wisdom. Random opener each visit, slow rotation after. Sourced from
-// the public canon; the theme of every line is the same — commitments
-// tell the truth that mouths won't.
+// The desk speaks in revealed preference: Art of War, tape wisdom,
+// the Stoics, Shakespeare. Random opener each visit, slow rotation
+// after. Sourced from the public canon; the theme of every line is
+// the same — commitments tell the truth that mouths won't.
 (function () {
   const Q = [
     { h: 'People lie. Positions <span>don\u2019t</span>.', a: '' },
     { h: 'Talk is cheap. <span>Filings aren\u2019t</span>.', a: '' },
-    { h: 'Money talks. <span>Bullshit walks</span>.', a: '' },
     { h: 'Actions speak louder than <span>words</span>.', a: '' },
-    { h: 'All warfare is based on <span>deception</span>.', a: '\u2014 Sun Tzu, The Art of War' },
-    { h: 'To know your enemy, you must become your <span>enemy</span>.', a: '\u2014 Sun Tzu' },
-    { h: 'Sit atop the mountain. Watch the tigers <span>fight</span>.', a: '\u2014 Chinese proverb' },
-    { h: 'Talk does not cook <span>rice</span>.', a: '\u2014 Chinese proverb' },
-    { h: 'When the tide goes out, you see who swam <span>naked</span>.', a: '\u2014 after Warren Buffett' },
-    { h: 'Be greedy when others are <span>fearful</span>.', a: '\u2014 Warren Buffett' },
-    { h: 'The market is never wrong. <span>Opinions are</span>.', a: '\u2014 Jesse Livermore' },
-    { h: 'Trust, but <span>verify</span>.', a: '\u2014 Russian proverb' },
     { h: 'Follow the <span>money</span>.', a: '' },
     { h: 'Watch the hands, not the <span>mouth</span>.', a: '' },
+    { h: 'All warfare is based on <span>deception</span>.', a: '\u2014 Sun Tzu, The Art of War' },
+    { h: 'To know your enemy, you must become your <span>enemy</span>.', a: '\u2014 Sun Tzu' },
+    { h: 'Appear weak when you are strong, and strong when you are <span>weak</span>.', a: '\u2014 Sun Tzu, The Art of War' },
+    { h: 'In the midst of chaos, there is also <span>opportunity</span>.', a: '\u2014 Sun Tzu, The Art of War' },
+    { h: 'Victorious warriors win first, then go to <span>war</span>.', a: '\u2014 after Sun Tzu' },
+    { h: 'He will win who knows when to fight and when not to <span>fight</span>.', a: '\u2014 Sun Tzu, The Art of War' },
+    { h: 'Sit atop the mountain. Watch the tigers <span>fight</span>.', a: '\u2014 Chinese proverb' },
+    { h: 'When the tide goes out, you see who swam <span>naked</span>.', a: '\u2014 after Warren Buffett' },
+    { h: 'Be greedy when others are <span>fearful</span>.', a: '\u2014 Warren Buffett' },
+    { h: 'Price is what you pay. Value is what you <span>get</span>.', a: '\u2014 Warren Buffett' },
+    { h: 'The market transfers money from the impatient to the <span>patient</span>.', a: '\u2014 after Warren Buffett' },
+    { h: 'Risk comes from not knowing what you\u2019re <span>doing</span>.', a: '\u2014 Warren Buffett' },
+    { h: 'The market is never wrong. <span>Opinions are</span>.', a: '\u2014 Jesse Livermore' },
+    { h: 'Trust, but <span>verify</span>.', a: '\u2014 Russian proverb' },
     { h: 'There are no facts, only <span>interpretations</span>.', a: '\u2014 Friedrich Nietzsche' },
     { h: 'Convictions are more dangerous enemies of truth than <span>lies</span>.', a: '\u2014 Friedrich Nietzsche' },
     { h: 'The most common stupidity is forgetting what you are trying to <span>do</span>.', a: '\u2014 after Nietzsche' },
     { h: 'He who has a why can bear almost any <span>how</span>.', a: '\u2014 Friedrich Nietzsche' },
-    { h: 'What does not kill me makes me <span>stronger</span>.', a: '\u2014 Friedrich Nietzsche' },
     { h: 'The snake which cannot cast its skin has to <span>die</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'Whoever fights monsters should see that he does not become a <span>monster</span>.', a: '\u2014 Friedrich Nietzsche' },
+    { h: 'Don\u2019t explain your philosophy. <span>Embody it</span>.', a: '\u2014 after Epictetus' },
+    { h: 'Men are disturbed not by things, but by the views they take of <span>them</span>.', a: '\u2014 Epictetus, Enchiridion' },
+    { h: 'First say to yourself what you would be; then do what you have to <span>do</span>.', a: '\u2014 Epictetus' },
+    { h: 'No man is free who is not master of <span>himself</span>.', a: '\u2014 Epictetus' },
+    { h: 'Wealth consists not in great possessions, but in few <span>wants</span>.', a: '\u2014 Epictetus' },
+    { h: 'We suffer more often in imagination than in <span>reality</span>.', a: '\u2014 Seneca' },
+    { h: 'If a man knows not to which port he sails, no wind is <span>favorable</span>.', a: '\u2014 Seneca' },
+    { h: 'While we postpone, life speeds <span>by</span>.', a: '\u2014 Seneca' },
+    { h: 'No man was ever wise by <span>chance</span>.', a: '\u2014 Seneca' },
+    { h: 'Difficulties strengthen the mind, as labor does the <span>body</span>.', a: '\u2014 Seneca' },
+    { h: 'There is a tide in the affairs of men, which taken at the flood leads on to <span>fortune</span>.', a: '\u2014 Shakespeare, Julius Caesar' },
+    { h: 'Our doubts are traitors, and make us lose the good we oft might <span>win</span>.', a: '\u2014 Shakespeare, Measure for Measure' },
+    { h: 'All that glisters is not <span>gold</span>.', a: '\u2014 Shakespeare, The Merchant of Venice' },
+    { h: 'How poor are they that have not <span>patience</span>! What wound did ever heal but by <span>degrees</span>?', a: '\u2014 Shakespeare, Othello' },
+    { h: 'Give every man thy ear, but few thy <span>voice</span>.', a: '\u2014 Shakespeare, Hamlet' },
+    { h: 'The fool doth think he is wise, but the wise man knows himself to be a <span>fool</span>.', a: '\u2014 Shakespeare, As You Like It' },
+    { h: 'There is nothing either good or bad, but thinking makes it <span>so</span>.', a: '\u2014 Shakespeare, Hamlet' },
   ];
   const title = document.getElementById('hero-title');
   const attrib = document.getElementById('hero-attrib');
