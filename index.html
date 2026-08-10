@@ -2242,6 +2242,95 @@ async function renderHistory() {
   `;
 }
 
+// ── CONTRACT BOOK OVERLAY — new-business 8-Ks via EDGAR full-text search ──
+// Opportunity names that are ALSO announcing contract wins are a different
+// class of signal: insiders/activists committing capital while the order
+// book grows is the strongest overlap the public record offers. For each
+// buy-side signal on the board, this searches the company's recent 8-Ks
+// (last 120 days, via the Worker's /sec-proxy → efts.sec.gov) for
+// contract/award language, badges the hits, and applies a modest score
+// boost. Keyword matching is deliberately labeled as such — an 8-K
+// mentioning "contract" is a lead to read, not a verified win.
+const CONTRACT_LOOKBACK_DAYS = 120;
+const CONTRACT_CACHE_KEY = 'sd_contract_book_v1';
+const CONTRACT_CACHE_TTL = 12 * 3600 * 1000;
+const contractBook = {};        // ticker -> {count, latestDate, url} | null
+const contractPending = {};
+let contractInFlight = 0, contractDirty = false;
+
+function contractBoost(s) {
+  if (s.direction !== 'buy' || !s.ticker) return 1;
+  const cb = contractBook[s.ticker];
+  if (!cb || !cb.count) return 1;
+  return cb.count >= 2 ? 1.25 : 1.12;
+}
+
+function contractChipHtml(t) {
+  const cb = contractBook[t];
+  if (!cb || !cb.count) return '';
+  return `<a href="${escHtml(cb.url)}" target="_blank" rel="noopener" title="8-K filings in the last ${CONTRACT_LOOKBACK_DAYS} days matching contract/award language via SEC EDGAR full-text search. Keyword match — read the filing before treating it as a win." style="text-decoration:none"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:var(--amber);border:1px solid var(--border);border-radius:4px;padding:1px 6px">CONTRACT 8-Ks \u00d7${cb.count} \u00b7 ${escHtml(cb.latestDate || '')}</span></a>`;
+}
+
+async function fetchContractBook(ticker) {
+  const cacheAll = sdMemGet(CONTRACT_CACHE_KEY, {}) || {};
+  const hit = cacheAll[ticker];
+  if (hit && Date.now() - hit.at < CONTRACT_CACHE_TTL) return hit.v;
+  let v = null;
+  try {
+    const cik = await SDFundamentals.resolveCik(ticker);
+    if (cik) {
+      const cik10 = String(cik).padStart(10, '0');
+      const start = new Date(); start.setDate(start.getDate() - CONTRACT_LOOKBACK_DAYS);
+      const seen = {};
+      for (const term of ['%22contract%22', '%22award%22']) {
+        const fts = `https://efts.sec.gov/LATEST/search-index?q=${term}&forms=8-K&ciks=${cik10}&startdt=${ymd(start)}&enddt=${ymd(new Date())}`;
+        try {
+          const res = await fetch(`${ALPACA_PROXY_URL}/sec-proxy?url=${encodeURIComponent(fts)}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          const hits = (data && data.hits && data.hits.hits) || [];
+          for (const h of hits) {
+            const src = h && h._source;
+            if (src && src.adsh) seen[src.adsh] = src.file_date || src.filedAt || '';
+          }
+        } catch (e) { /* one term failing is fine */ }
+      }
+      const adshes = Object.keys(seen);
+      if (adshes.length) {
+        const latest = adshes.sort((a, b) => (seen[b] || '').localeCompare(seen[a] || ''))[0];
+        v = {
+          count: adshes.length,
+          latestDate: seen[latest] || '',
+          url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik10}&type=8-K&dateb=&owner=include&count=20`,
+        };
+      } else v = { count: 0 };
+    }
+  } catch (e) { v = null; }
+  cacheAll[ticker] = { at: Date.now(), v };
+  const keys = Object.keys(cacheAll);
+  if (keys.length > 150) keys.sort((a, b) => cacheAll[a].at - cacheAll[b].at).slice(0, keys.length - 150).forEach(k => delete cacheAll[k]);
+  sdMemSet(CONTRACT_CACHE_KEY, cacheAll);
+  return v;
+}
+
+function enrichContractBook(ranked) {
+  if (!window.SDFundamentals || !ALPACA_PROXY_URL) return;
+  const tickers = [...new Set(ranked.filter(x => x.ticker && x.direction === 'buy').map(x => x.ticker))];
+  for (const t of tickers) {
+    if (t in contractBook || contractPending[t]) continue;
+    contractPending[t] = true;
+    contractInFlight++;
+    fetchContractBook(t)
+      .then(v => { contractBook[t] = v; })
+      .catch(() => { contractBook[t] = null; })
+      .then(() => {
+        delete contractPending[t];
+        contractInFlight--; contractDirty = true;
+        if (contractInFlight === 0 && contractDirty) { contractDirty = false; renderSignals(); }
+      });
+  }
+}
+
 // ── VALUATION OVERLAY — EV/EBITDA from SEC XBRL (fundamentals.js) ──
 // A cluster buy at 7x EV/EBITDA and one at 40x are not the same signal:
 // insider buying has historically been most informative in cheap names.
@@ -2304,18 +2393,19 @@ function renderSignals() {
     .filter(s => s.ageDays <= SIGNAL_MAX_AGE_DAYS)
     // sortValue carries the quality weights (insider role, cluster premium,
     // first-buy bonus); valueUsd stays the honest displayed dollar figure.
-    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) * valuationBoost(s) }))
+    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) * valuationBoost(s) * contractBoost(s) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 25);
   renderCommandCenter();
   enrichSignalValuations(ranked); // async EV/EBITDA chips + one quiet re-rank when the batch settles
+  enrichContractBook(ranked); // async contract-8K chips for the same opportunity set
   if (!ranked.length) {
     body.innerHTML = `<div class="status-box"><div class="spinner"></div>Scanning disclosures for large transactions — hedge-fund stake changes and big open-market insider trades will rank here by dollar value…</div>`;
     return;
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Conviction events, ranked by size <em>weighted by freshness</em> — recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names.
+      Conviction events, ranked by size <em>weighted by freshness</em> — recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names. Buy-side rows also get a <strong>CONTRACT 8-Ks</strong> badge when EDGAR full-text search finds recent filings matching contract/award language — a keyword lead worth reading, not a verified win — with a small extra rank boost, because committed capital plus a growing order book is the strongest overlap the public record offers.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
@@ -2324,7 +2414,7 @@ function renderSignals() {
         <div class="signal-entity">${escHtml(s.entity)}</div>
         <div class="signal-detail">${escHtml(s.detail)}</div>
         ${s.context ? `<div class="ctx-note" style="margin-top:4px">↳ ${escHtml(s.context)}</div>` : ''}
-        ${s.ticker && s.direction === 'buy' && valuationChipHtml(s.ticker) ? `<div style="margin-top:5px">${valuationChipHtml(s.ticker)}</div>` : ''}
+        ${s.ticker && s.direction === 'buy' && (valuationChipHtml(s.ticker) || contractChipHtml(s.ticker)) ? `<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${valuationChipHtml(s.ticker)}${contractChipHtml(s.ticker)}</div>` : ''}
         ${s.count > 1 ? `
         <div style="margin-top:6px">
           <button class="chart-jump-btn" data-closed-label="filed ×${s.count} — show all ▾" onclick="toggleSigFilings('sig-filings-${i}', this)">filed ×${s.count} — show all ▾</button>
