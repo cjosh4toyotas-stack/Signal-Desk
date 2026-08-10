@@ -432,5 +432,5 @@ window.SDFundamentals = (function () {
     return sign + '$' + Math.round(a).toLocaleString('en-US');
   }
 
-  return { getFacts, getMetrics, deriveMetrics, fetchLatestClose, fillEvCell, fmtBig };
+  return { getFacts, getMetrics, deriveMetrics, fetchLatestClose, fillEvCell, fmtBig, resolveCik };
 })();
