@@ -29,6 +29,15 @@ new_sqlite_classes = ["AlpacaStreamRelay"]
 binding = "SIGNAL_KV"
 id = "9bdcf08b527b426ca13242f0d2e7cc10"
 
+# D1 database "signal-desk-board" — the M&A deal board + IPO Radar data.
+# Written by the daily Claude scheduled task (research/re-rating) and by
+# the worker's own 30-minute deal-status scan; served to the dashboard at
+# GET /board-data. Created 2026-08-11.
+[[d1_databases]]
+binding = "BOARD_DB"
+database_name = "signal-desk-board"
+database_id = "ca579557-bf9a-4999-af27-da7ecef2bae5"
+
 # Cron for the 13D alert scan (see `scheduled` in alpaca-proxy-worker.js):
 # every 30 minutes. Push notifications additionally need:
 #   wrangler secret put NTFY_TOPIC
