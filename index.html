@@ -199,6 +199,74 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
   grid-column: 1/-1; padding: 18px 20px; border: 1px dashed var(--border); border-radius: 8px;
   color: var(--text-muted); font-size: 12px; line-height: 1.6;
 }
+.cc-badge.b-deal { border-color: rgba(96,165,250,0.5); color: #60a5fa; background: rgba(96,165,250,0.12); }
+.cc-badge.b-rumor { border-color: rgba(167,139,250,0.5); color: var(--violet); background: var(--violet-dim); }
+.cc-badge.b-new { border-color: var(--amber-glow); color: var(--amber); background: var(--amber-dim); animation: pulse-dot 1.6s infinite; }
+.cc-age { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
+.cc-cleared {
+  margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 11px; color: var(--text-muted); line-height: 1.7; background: var(--surface);
+}
+.cc-cleared .clr-item { text-decoration: line-through; opacity: 0.75; margin-right: 14px; white-space: nowrap; }
+.cc-cleared .clr-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--teal); margin-right: 4px; text-decoration: none; display: inline-block; }
+.cc-ipo-strip {
+  margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  font-size: 11.5px; color: var(--text-dim);
+}
+.cc-ipo-strip .ipo-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; transition: border-color .15s; background: var(--surface2);
+}
+.cc-ipo-strip .ipo-chip:hover { border-color: var(--amber-glow); }
+.cc-ipo-strip .ipo-chip b { font-family: 'Space Grotesk', sans-serif; font-size: 12px; }
+.ipo-score-pill { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+.ipo-s-high { background: rgba(57,255,143,0.15); color: var(--teal); border: 1px solid rgba(57,255,143,0.4); }
+.ipo-s-mid { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
+.ipo-s-low { background: var(--rose-dim); color: var(--rose); border: 1px solid rgba(255,92,114,0.4); }
+
+/* ── M&A DEALS TAB ────────────────────────────────────────── */
+.deal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 14px; }
+.deal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; min-width: 0; }
+.deal-card.deal-cleared { opacity: 0.6; }
+.deal-card.deal-cleared .deal-target { text-decoration: line-through; }
+.deal-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.deal-target { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; }
+.deal-acquirer { font-size: 11.5px; color: var(--text-dim); margin-bottom: 8px; }
+.deal-badge { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; white-space: nowrap; }
+.ds-regulatory { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-glow); }
+.ds-vote { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(57,255,143,0.4); }
+.ds-other { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.4); }
+.ds-rumored { background: var(--violet-dim); color: var(--violet); border: 1px solid rgba(167,139,250,0.4); }
+.ds-closed { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+.ds-terminated { background: var(--rose-dim); color: var(--rose); border: 1px solid rgba(255,92,114,0.4); }
+.deal-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11.5px; margin: 8px 0; }
+.deal-facts dt { color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; padding-top: 1px; }
+.deal-facts dd { color: var(--text-dim); margin: 0; min-width: 0; }
+.deal-spread { font-family: 'IBM Plex Mono', monospace; font-weight: 700; }
+.deal-spread.sp-pos { color: var(--teal); }
+.deal-spread.sp-neg { color: var(--rose); }
+.deal-stage { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; border-left: 2px solid var(--border); padding-left: 10px; margin: 8px 0 0; }
+.deal-risk { font-size: 11px; color: var(--rose); opacity: 0.85; margin-top: 6px; line-height: 1.5; }
+.section-label { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin: 22px 0 10px; }
+.section-label:first-child { margin-top: 0; }
+
+/* ── IPO RADAR TAB ────────────────────────────────────────── */
+.ipo-context { font-size: 12px; color: var(--text-dim); line-height: 1.65; border: 1px dashed var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.ipo-row { cursor: pointer; }
+.ipo-row td { vertical-align: middle; }
+.ipo-rank { font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--text-muted); width: 34px; }
+.ipo-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; }
+.ipo-name .ipo-tick { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--amber); margin-left: 6px; }
+.ipo-biz { font-size: 11px; color: var(--text-muted); margin-top: 2px; max-width: 340px; }
+.ipo-scorebar { width: 90px; height: 6px; border-radius: 3px; background: var(--surface2); border: 1px solid var(--border); overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.ipo-scorebar i { display: block; height: 100%; background: linear-gradient(90deg, var(--rose), var(--amber) 55%, var(--teal)); }
+.ipo-detail-row td { background: var(--surface2); padding: 14px 18px; }
+.ipo-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 20px; font-size: 11.5px; margin-bottom: 10px; }
+.ipo-detail-grid div b { color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px; display: block; }
+.ipo-thesis { font-size: 12px; line-height: 1.65; color: var(--text-dim); border-left: 2px solid var(--amber-glow); padding-left: 12px; }
+.ipo-comps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ipo-comp-chip { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-dim); }
 .badge-esc { background: var(--rose-dim); color: var(--rose); }
 .pct-delta-up { color: var(--teal); font-size: 10px; }
 .pct-delta-down { color: var(--rose); font-size: 10px; }
@@ -398,11 +466,13 @@ footer a { color: var(--amber); }
   <div class="command-center" id="command-center">
     <div class="cc-header">
       <div class="cc-title"><span class="cc-dot"></span>Confluence Board</div>
-      <div class="cc-sub">names where independent signals stack — updates live as each source loads</div>
+      <div class="cc-sub">signals + live M&amp;A deals stacked by recency — <span id="cc-updated">loading…</span></div>
     </div>
     <div class="cc-grid" id="cc-grid">
-      <div class="cc-empty">Scanning all disclosure streams… names appear here the moment two independent signals point at the same company (or one stream fires its strongest pattern — a new activist 13D, an insider cluster buy, a 13G→13D escalation).</div>
+      <div class="cc-empty">Scanning all disclosure streams… names appear here the moment two independent signals point at the same company (or one stream fires its strongest pattern — a new activist 13D, an insider cluster buy, a 13G→13D escalation, a live merger near its close).</div>
     </div>
+    <div id="cc-cleared" style="display:none"></div>
+    <div id="cc-ipo-strip" style="display:none"></div>
   </div>
 
   <div class="tabs">
@@ -410,6 +480,8 @@ footer a { color: var(--amber); }
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
     <button class="tab-btn" data-tab="watch13d" onclick="switchTab('watch13d')">13D Watch</button>
     <button class="tab-btn" data-tab="campaigns" onclick="switchTab('campaigns')">Campaigns</button>
+    <button class="tab-btn" data-tab="deals" onclick="switchTab('deals')">M&amp;A Deals</button>
+    <button class="tab-btn" data-tab="ipo" onclick="switchTab('ipo')">IPO Radar</button>
     <button class="tab-btn" data-tab="insiders" onclick="switchTab('insiders')">Insider Trades</button>
     <button class="tab-btn" data-tab="institutions" onclick="switchTab('institutions')">Hedge Funds (13F)</button>
     <button class="tab-btn" data-tab="charts" onclick="switchTab('charts')">Price Charts</button>
@@ -445,6 +517,22 @@ footer a { color: var(--amber); }
     <div id="watch13d-body">
       <div class="status-box"><div class="spinner"></div>Fetching the live Schedule 13D/13G feed from SEC EDGAR…</div>
     </div>
+  </div>
+
+  <!-- M&A DEALS — live deal tracker, auto-pruned -->
+  <div class="tab-panel" id="tab-deals">
+    <div id="deals-body">
+      <div class="status-box"><div class="spinner"></div>Loading the live deal board…</div>
+    </div>
+    <div class="chart-note">Deal list refreshed daily by scheduled research; statuses re-checked every 30 minutes against SEC EDGAR (Form 25 delistings, 8-K completions). Completed and terminated deals are shown struck-through for ~3 weeks, then pruned automatically. Not investment advice.</div>
+  </div>
+
+  <!-- IPO RADAR — upcoming IPOs, rated & ranked -->
+  <div class="tab-panel" id="tab-ipo">
+    <div id="ipo-body">
+      <div class="status-box"><div class="spinner"></div>Loading the IPO pipeline…</div>
+    </div>
+    <div class="chart-note">Ratings are a research composite (0–100): fundamentals /25, valuation &amp; entry /20, underwriters /15, sector momentum /20, structure &amp; lockup /10, timing certainty /10 — re-scored daily as filings and terms evolve. Click any row for the full profile and thesis. Not investment advice.</div>
   </div>
 
   <!-- INSIDER TRADES -->
@@ -574,6 +662,229 @@ function normName(s) {
 // slash) once you've deployed alpaca-proxy-worker.js. Leave blank and the
 // Price Charts tab will explain what's missing instead of failing silently.
 const ALPACA_PROXY_URL = 'https://signal-desk-alpaca-proxy.jahloverules.workers.dev';
+
+// ══════════════════════════════════════════════════════════════
+// M&A DEAL BOARD + IPO RADAR — cloud-synced via the Worker's /board-data
+// ══════════════════════════════════════════════════════════════
+// The deal list and IPO ratings live in a D1 database behind the Worker,
+// refreshed daily by scheduled research and checked every 30 minutes for
+// deal completions/delistings on EDGAR. That means: same data on every
+// computer, closed mergers clear themselves, and this page never bakes a
+// stale list into HTML. SEED_BOARD_DATA below is only the day-one
+// fallback for when the Worker hasn't been redeployed with /board-data.
+const SEED_BOARD_DATA = {"deals":[{"id":"wbd-paramount","target":"Warner Bros. Discovery","ticker":"WBD","cik":"1437107","acquirer":"Paramount Skydance","ann_date":"2026-02-27","deal_type":"cash","offer_price":"$31.00 cash","offer_cash":31,"deal_value":"$110.9B EV","expected_close":"Paused — outside date Jun 1, 2027; ticking fees from Oct 1, 2026","status":"pending_other","stage_detail":"All major regulatory approvals secured (DOJ Jun 12, UK CMA Aug 6) but closing paused under a Jul 24 agreement pending resolution of antitrust suits by 12 state AGs and the WGA.","risk_note":"State-AG/WGA litigation could block or delay; Paramount owes ~$650M per 90-day delay from Oct 1, 2026.","close_date":null,"source_url":"https://www.npr.org/2026/07/24/nx-s1-5906818/paramount-warner-bros-merger-pause-lawsuits","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"nsc-unp","target":"Norfolk Southern","ticker":"NSC","cik":"702165","acquirer":"Union Pacific","ann_date":"2025-07-29","deal_type":"cash+stock","offer_price":"1.000 UNP + $88.82 cash","offer_cash":null,"deal_value":"$85B","expected_close":"2027 (STB decision expected 2027)","status":"pending_regulatory","stage_detail":"STB accepted the application in May 2026; applicants filed additional customer assurances Jul 27, 2026 — review continues.","risk_note":"First transcontinental rail merger; shipper, labor and political opposition; extended STB review.","close_date":null,"source_url":"https://www.stb.gov/news-communications/latest-news/pr-26-13/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"kvue-kmb","target":"Kenvue","ticker":"KVUE","cik":"1944048","acquirer":"Kimberly-Clark","ann_date":"2025-11-03","deal_type":"cash+stock","offer_price":"$3.50 cash + 0.14625 KMB","offer_cash":null,"deal_value":"$48.7B","expected_close":"H2 2026","status":"pending_regulatory","stage_detail":"Both shareholder bases approved (Jan 2026); EU foreign-subsidies clearance secured; remaining antitrust clearances pending.","risk_note":"Tylenol litigation overhang; remaining international clearances.","close_date":null,"source_url":"https://www.investor.kimberly-clark.com/news-releases/news-release-details/kimberly-clark-and-kenvue-shareholders-overwhelmingly-approve","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"avb-eqr","target":"AvalonBay Communities","ticker":"AVB","cik":"915912","acquirer":"Equity Residential (merger of equals)","ann_date":"2026-05-21","deal_type":"stock","offer_price":"2.793 EQR per AVB","offer_cash":null,"deal_value":"$69B combined EV","expected_close":"H2 2026","status":"pending_vote","stage_detail":"All-stock merger of equals creating a ~$52B apartment REIT; shareholder votes at both companies pending.","risk_note":"Primarily vote and market risk; limited regulatory risk.","close_date":null,"source_url":"https://investors.avalonbay.com/news-events/press-releases/detail/439/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"d-nee","target":"Dominion Energy","ticker":"D","cik":"715957","acquirer":"NextEra Energy","ann_date":"2026-05-18","deal_type":"stock","offer_price":"0.8138 NEE per D","offer_cash":null,"deal_value":"$66.8B","expected_close":"Mid-to-late 2027","status":"pending_regulatory","stage_detail":"Multi-regulator review underway: FERC, Virginia SCC, Carolinas commissions, NRC.","risk_note":"Heavy state regulatory/political scrutiny in Virginia over creating the largest US regulated utility.","close_date":null,"source_url":"https://www.nbcnews.com/business/energy/nextera-dominion-deal-ai-boom-rcna345652","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"aes-gip","target":"AES Corporation","ticker":"AES","cik":"874761","acquirer":"GIP (BlackRock) / EQT consortium","ann_date":"2026-03-02","deal_type":"cash","offer_price":"$15.00 cash","offer_cash":15,"deal_value":"$10.7B equity (~$33.4B EV)","expected_close":"Late 2026","status":"pending_regulatory","stage_detail":"Stockholders approved; FERC and state utility approvals pending.","risk_note":"Utility/state regulatory conditions in multiple jurisdictions.","close_date":null,"source_url":"https://www.prnewswire.com/news-releases/aes-stockholders-approve-acquisition-302812261.html","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"teck-anglo","target":"Teck Resources","ticker":"TECK","cik":"886986","acquirer":"Anglo American (Anglo Teck MoE)","ann_date":"2025-09-09","deal_type":"stock","offer_price":"1.3301 AAL per TECK","offer_cash":null,"deal_value":"~$50B+ combined","expected_close":"H2 2026","status":"pending_regulatory","stage_detail":"Shareholder approvals and Canada ICA clearance complete; executive team named Jul 30 — awaiting remaining approvals incl. China.","risk_note":"Outstanding foreign approvals (notably China) and Canadian undertakings.","close_date":null,"source_url":"https://www.angloamerican.com/media/press-releases/2026/30-07-2026b","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"roku-fox","target":"Roku","ticker":"ROKU","cik":"1428439","acquirer":"Fox Corporation","ann_date":"2026-06-15","deal_type":"cash+stock","offer_price":"$96.00 cash + 0.9693 FOXA (~$160)","offer_cash":null,"deal_value":"$22B EV","expected_close":"H1 2027","status":"pending_vote","stage_detail":"Both shareholder votes plus US and foreign regulatory clearances pending since the Jun 15 announcement.","risk_note":"Media-consolidation review; FOX stock-component market risk; $12B bridge committed.","close_date":null,"source_url":"https://www.prnewswire.com/news-releases/fox-corporation-to-acquire-roku-inc-302800220.html","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"qrvo-swks","target":"Qorvo","ticker":"QRVO","cik":"1604778","acquirer":"Skyworks Solutions","ann_date":"2025-10-28","deal_type":"cash+stock","offer_price":"$32.15 cash + 0.960 SWKS","offer_cash":null,"deal_value":"$22B combined","expected_close":"Early 2027, possibly earlier","status":"pending_regulatory","stage_detail":"Shareholders approved; US antitrust cleared; remaining international approvals in progress — management signals possible early close.","risk_note":"China SAMR clearance is the key remaining risk.","close_date":null,"source_url":"https://www.qorvo.com/newsroom/news/2025/skyworks-and-qorvo-to-combine","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"czr-fertitta","target":"Caesars Entertainment","ticker":"CZR","cik":"1590895","acquirer":"Fertitta Entertainment","ann_date":"2026-05-28","deal_type":"cash","offer_price":"$31.00 cash","offer_cash":31,"deal_value":"$17.6B incl. debt","expected_close":"2027 (gaming approvals)","status":"pending_regulatory","stage_detail":"Go-shop expired Jul 2026; shareholder vote and multi-state gaming approvals pending.","risk_note":"Lengthy multi-state gaming license approvals; committed debt from 10 banks.","close_date":null,"source_url":"https://www.prnewswire.com/news-releases/fertitta-entertainment-caesars-302783985.html","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"pen-bsx","target":"Penumbra","ticker":"PEN","cik":"1321732","acquirer":"Boston Scientific","ann_date":"2026-01-15","deal_type":"cash","offer_price":"$374.00 cash","offer_cash":374,"deal_value":"$14.5B","expected_close":"H2 2026","status":"pending_regulatory","stage_detail":"Antitrust clearance pending; close expected H2 2026.","risk_note":"FTC review of thrombectomy/interventional device overlap.","close_date":null,"source_url":"https://news.bostonscientific.com/2026-01-15","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"wbs-santander","target":"Webster Financial","ticker":"WBS","cik":"801337","acquirer":"Banco Santander","ann_date":"2026-02-03","deal_type":"cash","offer_price":"$75.59 cash","offer_cash":75.59,"deal_value":"$12.2B","expected_close":"~Aug 20, 2026 (scheduled)","status":"pending_other","stage_detail":"Final Federal Reserve approval received Aug 4 — closing expected on or around Aug 20, 2026.","risk_note":"Minimal remaining risk; all material approvals in hand.","close_date":null,"source_url":"https://www.santander.com/en/press-room/press-releases/2026/08/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"gsat-amzn","target":"Globalstar","ticker":"GSAT","cik":"1366868","acquirer":"Amazon","ann_date":"2026-04-14","deal_type":"cash+stock","offer_price":"$90.00 (cash or AMZN election)","offer_cash":90,"deal_value":"$11.6B","expected_close":"2027","status":"pending_regulatory","stage_detail":"FCC spectrum-transfer and other reviews pending as Amazon folds Globalstar into its Leo network.","risk_note":"FCC spectrum review; complexity around Globalstar's Apple relationship.","close_date":null,"source_url":"https://investors.globalstar.com/news-releases/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"ogn-sun","target":"Organon","ticker":"OGN","cik":"1821825","acquirer":"Sun Pharmaceutical","ann_date":"2026-04-26","deal_type":"cash","offer_price":"$14.00 cash","offer_cash":14,"deal_value":"$11.75B incl. debt","expected_close":"Early 2027","status":"pending_regulatory","stage_detail":"Shareholder approval and global regulatory clearances in progress.","risk_note":"Cross-border pharma reviews across multiple jurisdictions.","close_date":null,"source_url":"https://www.organon.com/news/sun-pharma-organon/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"tech-merckkgaa","target":"Bio-Techne","ticker":"TECH","cik":"842023","acquirer":"Merck KGaA","ann_date":"2026-06-25","deal_type":"cash","offer_price":"$73.00 cash","offer_cash":73,"deal_value":"$11.3B","expected_close":"Late 2026 / early 2027","status":"pending_vote","stage_detail":"Shareholder approval and multi-jurisdiction clearances pending.","risk_note":null,"close_date":null,"source_url":"https://investors.bio-techne.com/news/detail/535/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"apge-abbv","target":"Apogee Therapeutics","ticker":"APGE","cik":"1974640","acquirer":"AbbVie","ann_date":"2026-06-22","deal_type":"cash","offer_price":"$135.11 cash","offer_cash":135.11,"deal_value":"$10.9B","expected_close":"Q3–Q4 2026","status":"pending_vote","stage_detail":"Merger proxy filed; shareholder vote and HSR clearance pending; AbbVie raising $8B+ in bonds to fund.","risk_note":null,"close_date":null,"source_url":"https://news.abbvie.com/2026-06-22","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"txnm-blackstone","target":"TXNM Energy","ticker":"TXNM","cik":null,"acquirer":"Blackstone Infrastructure","ann_date":"2025-05-19","deal_type":"cash","offer_price":"$61.25 cash","offer_cash":61.25,"deal_value":"$11.5B incl. debt","expected_close":"H2 2026","status":"pending_regulatory","stage_detail":"Shareholder, FERC and Texas PUC approvals secured — final New Mexico PRC approval is the last major gate.","risk_note":"New Mexico regulatory conditions/timing.","close_date":null,"source_url":"https://www.txnmenergy.com/investors/acquisition.aspx","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"lnth-curium","target":"Lantheus Holdings","ticker":"LNTH","cik":null,"acquirer":"Curium","ann_date":"2026-08-03","deal_type":"cash","offer_price":"$102.50 cash + up to $12.00 CVR","offer_cash":102.5,"deal_value":"Up to $8.0B","expected_close":"H1 2027","status":"pending_vote","stage_detail":"Newly announced take-private; shareholder approval and regulatory clearances pending.","risk_note":"CVR contingent on commercial milestones through 2030.","close_date":null,"source_url":"https://www.globenewswire.com/news-release/2026/08/03/3337411/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"mktx-ice","target":"MarketAxess","ticker":"MKTX","cik":null,"acquirer":"Intercontinental Exchange","ann_date":"2026-07-30","deal_type":"cash","offer_price":"$167.00 cash","offer_cash":167,"deal_value":"$6.0B equity","expected_close":"H1 2027","status":"pending_vote","stage_detail":"Stockholder approval and regulatory clearances pending on the all-cash deal announced Jul 30.","risk_note":null,"close_date":null,"source_url":"https://www.businesswire.com/news/home/20260730809991/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"itgr-kkr","target":"Integer Holdings","ticker":"ITGR","cik":null,"acquirer":"KKR","ann_date":"2026-08-03","deal_type":"cash","offer_price":"$127.00 cash","offer_cash":127,"deal_value":"$5.7B","expected_close":"End of 2026","status":"pending_vote","stage_detail":"Newly announced take-private; stockholder approval and customary clearances pending.","risk_note":null,"close_date":null,"source_url":"https://www.globenewswire.com/news-release/2026/08/03/3337312/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"bmy-azn-rumor","target":"Bristol Myers Squibb","ticker":"BMY","cik":"14272","acquirer":"AstraZeneca (reported talks)","ann_date":null,"deal_type":"stock","offer_price":"Rumored ~$400B merger of equals","offer_cash":null,"deal_value":"~$400B combined","expected_close":null,"status":"rumored","stage_detail":"FT reported Aug 2 that AstraZeneca held talks with BMY about a ~$400B combination; AZN has since distanced itself after investor pushback — talks appear cooled.","risk_note":"AZN signaled it is not currently pursuing; enormous antitrust/political hurdles if revived.","close_date":null,"source_url":"https://www.cnbc.com/2026/08/02/astrazeneca-bristol-myers-squibb-400-billion.html","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"ash-sale-rumor","target":"Ashland","ticker":"ASH","cik":"1674862","acquirer":"Exploring sale (strategic + PE interest)","ann_date":null,"deal_type":"cash","offer_price":"—","offer_cash":null,"deal_value":"~$3B market cap","expected_close":null,"status":"rumored","stage_detail":"Bloomberg reported Aug 7 that Ashland is exploring a sale after takeover interest, amid Ancora activist pressure.","risk_note":"No agreed deal; process could end without a transaction.","close_date":null,"source_url":"https://www.bloomberg.com/news/articles/2026-08-07/ashland","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"alkt-sale-rumor","target":"Alkami Technology","ticker":"ALKT","cik":null,"acquirer":"Formal sale process launched","ann_date":null,"deal_type":"cash","offer_price":"—","offer_cash":null,"deal_value":"~$2–3B market cap","expected_close":null,"status":"rumored","stage_detail":"Alkami launched a formal sale process Aug 6 following Jana Partners pressure — no buyer or terms announced.","risk_note":"Process may not result in a deal.","close_date":null,"source_url":"https://www.thespecialsituationreport.com/p/the-special-situation-report-226","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"ea-pif","target":"Electronic Arts","ticker":"EA","cik":"712515","acquirer":"PIF / Silver Lake / Affinity","ann_date":"2025-09-29","deal_type":"cash","offer_price":"$210.00 cash","offer_cash":210,"deal_value":"$55B","expected_close":null,"status":"closed","stage_detail":"Take-private completed and EA delisted — largest all-cash LBO ever.","risk_note":null,"close_date":"2026-08-04","source_url":"https://www.ea.com/news/ea-announces-completion-of-acquisition","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"nsa-psa","target":"National Storage Affiliates","ticker":"NSA","cik":null,"acquirer":"Public Storage","ann_date":"2026-03-16","deal_type":"stock","offer_price":"All-stock into PSA","offer_cash":null,"deal_value":"~$10B+","expected_close":null,"status":"closed","stage_detail":"Merger completed Jul 22, 2026 after NSA shareholder approval.","risk_note":null,"close_date":"2026-07-22","source_url":"https://www.businesswire.com/news/home/20260722542295/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"bld-qxo","target":"TopBuild","ticker":"BLD","cik":null,"acquirer":"QXO","ann_date":null,"deal_type":"cash+stock","offer_price":"$6.4B cash + 312.5M QXO shares","offer_cash":null,"deal_value":"~$17B","expected_close":null,"status":"closed","stage_detail":"Completed early Jul 2026 after both stockholder approvals.","risk_note":null,"close_date":"2026-07-01","source_url":"https://investors.qxo.com/news/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"gtls-bkr","target":"Chart Industries","ticker":"GTLS","cik":null,"acquirer":"Baker Hughes","ann_date":"2025-07-29","deal_type":"cash","offer_price":"$210.00 cash","offer_cash":210,"deal_value":"$13.6B","expected_close":null,"status":"closed","stage_detail":"Completed Jul 16, 2026; Chart delisted from NYSE.","risk_note":null,"close_date":"2026-07-16","source_url":"https://www.globenewswire.com/news-release/2026/07/16/3328459/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"pra-doctors","target":"ProAssurance","ticker":"PRA","cik":null,"acquirer":"The Doctors Company","ann_date":"2025-03-19","deal_type":"cash","offer_price":"$25.00 cash","offer_cash":25,"deal_value":"$1.3B","expected_close":null,"status":"closed","stage_detail":"Completed Jun 26, 2026 after state insurance approvals.","risk_note":null,"close_date":"2026-06-26","source_url":"https://www.arblens.com/blog/weekly-009.html","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"sstk-getty","target":"Shutterstock","ticker":"SSTK","cik":"1549346","acquirer":"Getty Images (terminated)","ann_date":"2025-01-07","deal_type":"cash+stock","offer_price":"Cash/stock MoE (terminated)","offer_cash":null,"deal_value":"$3.7B","expected_close":null,"status":"terminated","stage_detail":"Getty terminated rather than accept the UK CMA's required divestiture; SSTK fell ~30% on the break.","risk_note":"Killed by UK CMA remedy condition.","close_date":"2026-07-06","source_url":"https://www.tradingview.com/news/654ec45e79dc2/","updated_at":"2026-08-11T03:00:00Z","last_check":null},{"id":"glxz-evolution","target":"Galaxy Gaming","ticker":"GLXZ","cik":null,"acquirer":"Evolution AB (terminated)","ann_date":null,"deal_type":"cash","offer_price":"Cash merger (terminated)","offer_cash":null,"deal_value":"~$85M","expected_close":null,"status":"terminated","stage_detail":"Termination announced Jul 21, 2026 after prolonged regulatory licensing delays.","risk_note":null,"close_date":"2026-07-21","source_url":"https://www.globenewswire.com/news-release/2026/07/21/3330991/","updated_at":"2026-08-11T03:00:00Z","last_check":null}],"ipos":[{"id":"anthropic","company":"Anthropic","ticker":null,"exchange":null,"sector":"AI / foundation models","business":"Maker of the Claude AI model family and enterprise AI platform","window":"Oct–Nov 2026","valuation":"~$965B Series H; ~$1T secondary marks","raise":"Undisclosed — expected among largest ever","underwriters":"Goldman Sachs, Morgan Stanley (leads); JPMorgan reported","revenue":"~$14B annualized run-rate","growth":"Triple-digit YoY; paid base reportedly doubled ahead of IPO","profitability":"Reportedly approaching first quarterly operating profit","investors":"Amazon, Google (up to $40B), Blackstone, Sequoia, Goldman Sachs","structure_notes":"Confidential S-1 filed Jun 1; investor meetings underway for an October debut; ~$36B chip-allocated debt","filing_status":"confidential_reported","score":84,"rank":1,"comp":"{\"fund\":23,\"val\":13,\"uw\":15,\"mom\":19,\"struct\":6,\"time\":8}","thesis":"The class of the 2026 pipeline: hyperscale revenue run-rate with unit economics reportedly near operating profit — a profile no other AI candidate matches. Valuation near $1T prices in a lot, and the chip-debt load and unknown float are the watch items, but top-tier banks and a hot AI window make this the anchor deal of the fall.","source_url":"https://www.foxbusiness.com/markets/anthropic-files-confidentially-ipo","updated_at":"2026-08-11T03:00:00Z"},{"id":"oura","company":"Oura","ticker":null,"exchange":null,"sector":"Consumer health / wearables","business":"Finnish smart-ring maker for sleep and health tracking","window":"Q4 2026","valuation":"$11B (Series E, Oct 2025)","raise":null,"underwriters":"Goldman Sachs, Morgan Stanley, JPMorgan, Allen & Co, Jefferies","revenue":"~$1B in 2025; guiding $1.5–2B for 2026","growth":"Revenue roughly doubled in each of 2024 and 2025","profitability":"Company says it is 'expanding profitability'","investors":"Fidelity, ICONIQ, Whale Rock, Atreides, Dexcom","structure_notes":"Confidential draft S-1 May 21 via US holding entity; no public S-1 yet","filing_status":"confidential_reported","score":74,"rank":2,"comp":"{\"fund\":20,\"val\":14,\"uw\":15,\"mom\":12,\"struct\":7,\"time\":6}","thesis":"Rare consumer-hardware story with software economics: revenue doubling two years running toward ~$2B with claimed profitability, at a Series E mark (~$11B) that isn't stretched if growth holds. Consumer IPO appetite is the soft spot — recent consumer deals traded flat — so entry price will decide this one.","source_url":"https://www.cnbc.com/2026/05/21/oura-smart-ring-ipo-filing.html","updated_at":"2026-08-11T03:00:00Z"},{"id":"switch","company":"Switch","ticker":null,"exchange":null,"sector":"Data centers / digital infrastructure","business":"Hyperscale data center operator (NV, MI, GA, TX campuses)","window":"Nov 2026 (earliest)","valuation":"~$50B incl. debt (reported target)","raise":null,"underwriters":"BofA, Citi, Goldman Sachs, JPMorgan, Morgan Stanley","revenue":null,"growth":null,"profitability":null,"investors":"DigitalBridge, IFM; a16z leading pre-IPO raise, Ben Horowitz joining board","structure_notes":"Taken private 2022 at $11B incl. debt; returning at ~4.5x that mark","filing_status":"confidential_reported","score":73,"rank":3,"comp":"{\"fund\":15,\"val\":11,\"uw\":15,\"mom\":19,\"struct\":6,\"time\":7}","thesis":"Purest large-cap play on the AI data-center buildout in the pipeline, with a full top-5 bank syndicate. The caution: coming back at ~4.5x its 2022 take-private mark means the AI premium is already in the price, and financials aren't public yet — score improves if the S-1 shows contracted capacity growth to match.","source_url":"https://www.briefs.co/news/switch-takes-confidential-step-toward-ipo","updated_at":"2026-08-11T03:00:00Z"},{"id":"lyntris","company":"Lyntris","ticker":"LYNX","exchange":"NYSE","sector":"Defense technology","business":"Sensor architecture, RF/radar and C2 software for missile defense and space ISR","window":"Aug 2026 (week of Aug 17)","valuation":"~$2.4B at midpoint","raise":"$492M (24M shares at $19–22)","underwriters":"Evercore ISI, Citi, Guggenheim, BofA, Baird, Raymond James, William Blair","revenue":"$451M LTM","growth":null,"profitability":null,"investors":"Trive Capital","structure_notes":"~80% of offered shares are secondary — heavy sponsor selling at IPO","filing_status":"terms_set","score":71,"rank":4,"comp":"{\"fund\":16,\"val\":13,\"uw\":12,\"mom\":17,\"struct\":3,\"time\":10}","thesis":"Nearest-term deal on the list, priced into a genuinely hot defense-tech tape at a sane ~5x sales. The structural red flag is loud: 80% of the float is the sponsor cashing out, which is why the structure score is the lowest on the board. A strong debut is plausible; long-term alignment is the question.","source_url":"https://www.renaissancecapital.com/IPO-Center/News/121008/","updated_at":"2026-08-11T03:00:00Z"},{"id":"syntiant","company":"Syntiant","ticker":"SYTN","exchange":"Nasdaq","sector":"Semiconductors / edge AI","business":"Ultra-low-power neural processors and sensors for on-device AI","window":"Q3 2026","valuation":null,"raise":"~$300M (estimated)","underwriters":"Citi, BofA, UBS, Needham, Stifel, Cantor +6","revenue":"$270M LTM","growth":"Sensor-led revenue; AI processor sales smaller but growing","profitability":null,"investors":"Intel Capital, Microsoft M12","structure_notes":"Public S-1 Jul 6; acquired Knowles consumer MEMS mic business 2024","filing_status":"s1_filed","score":70,"rank":5,"comp":"{\"fund\":15,\"val\":12,\"uw\":13,\"mom\":17,\"struct\":6,\"time\":7}","thesis":"Real revenue ($270M LTM) and a public S-1 separate this from the paper pipeline, and 'AI at the edge' is an easy story to sell into this tape. Watch the mix: today's revenue skews to the acquired sensor business, not the neural processors the multiple will be pitched on.","source_url":"https://www.renaissancecapital.com/IPO-Center/News/120304/","updated_at":"2026-08-11T03:00:00Z"},{"id":"motive","company":"Motive Technologies","ticker":"MTVE","exchange":"NYSE","sector":"Fleet management SaaS / IoT","business":"AI fleet management and spend platform (ex-KeepTruckin), ~100K customers","window":"H2 2026 – 2027 (S-1 live, awaiting window)","valuation":"$2.85B (2022); ~$3.5–4B estimates","raise":"$100M placeholder","underwriters":"JPMorgan, Citi, Barclays, Jefferies","revenue":"$327M for 9M 2025 (+22%); ARR $501M","growth":"ARR +27%; 110% NDR","profitability":"Net loss $138.5M (9M 2025); 70% gross margin","investors":"Alphabet/CapitalG, Kleiner Perkins, AllianceBernstein","structure_notes":"S-1 filed Dec 23, 2025; roadshow pulled Jan 2026 — deal parked, no withdrawal","filing_status":"s1_filed","score":69,"rank":6,"comp":"{\"fund\":17,\"val\":15,\"uw\":13,\"mom\":12,\"struct\":7,\"time\":5}","thesis":"The value entry on the board: $500M ARR growing 27% with 110% NDR, likely priced at a fraction of comp Samsara's ~$21B multiple precisely because the January roadshow was pulled. If the window reopens for SaaS, the parked S-1 lets it move fast — patience gets paid here.","source_url":"https://www.cnbc.com/2025/12/23/alphabet-backed-motive-files-for-ipo.html","updated_at":"2026-08-11T03:00:00Z"},{"id":"lambda","company":"Lambda","ticker":null,"exchange":null,"sector":"AI cloud infrastructure","business":"GPU cloud for AI training/inference — the developer-friendly CoreWeave alternative","window":"H2 2026 – 2027","valuation":"~$5.9B (Series E-3, Nov 2025)","raise":null,"underwriters":"Morgan Stanley, JPMorgan, Citi (hired)","revenue":"~$500M+ annualized (mid-2025)","growth":"Cloud GPU segment more than doubling","profitability":"61% gross margin; net profitability undisclosed","investors":"Nvidia, TWG Global, USIT Fund; Microsoft anchor customer","structure_notes":"Raised pre-IPO capital instead of listing in H1; CoreWeave is the public comp","filing_status":"expected","score":67,"rank":7,"comp":"{\"fund\":15,\"val\":13,\"uw\":14,\"mom\":17,\"struct\":5,\"time\":3}","thesis":"CoreWeave's public-market run gives Lambda a proven comp and banks are already hired — the AI-infra story sells itself. Customer concentration (Microsoft anchor) and no confirmed filing keep it a watch-not-chase until an S-1 lands.","source_url":"https://forgeglobal.com/insights/lambda-upcoming-ipo-news/","updated_at":"2026-08-11T03:00:00Z"},{"id":"kraken","company":"Kraken (Payward)","ticker":null,"exchange":null,"sector":"Crypto exchange / fintech","business":"Second-largest US crypto exchange, expanding into equities and payments","window":"Q4 2026 – 2027","valuation":"$20B (Nov 2025 raise)","raise":null,"underwriters":"Goldman Sachs, JPMorgan","revenue":"~$1.5B (2024)","growth":null,"profitability":null,"investors":"Citadel Securities, Jane Street, Tribe, Hummingbird","structure_notes":"Confidential filing Nov 2025; froze IPO Mar 2026, revival signaled May 2026 — ~80% ready per co-CEO","filing_status":"confidential_reported","score":66,"rank":8,"comp":"{\"fund\":15,\"val\":12,\"uw\":14,\"mom\":15,\"struct\":6,\"time\":4}","thesis":"Crypto listings have worked (Circle, Gemini, Bullish), and Kraken is the biggest name left on the shelf with top banks attached. The freeze-then-revive history says timing is entirely BTC-beta — rate it a strong candidate whose window, not whose business, is the risk.","source_url":"https://www.coindesk.com/business/2026/03/17/kraken-freezes-ipo","updated_at":"2026-08-11T03:00:00Z"},{"id":"openai","company":"OpenAI","ticker":null,"exchange":null,"sector":"AI / foundation models","business":"ChatGPT maker; ~900M weekly active users","window":"Q4 2026 earliest; mid-2027 median","valuation":"$852B (Mar 2026); ~$880B secondary","raise":"Forecasts of $60B+","underwriters":"Goldman Sachs, Morgan Stanley (reported)","revenue":"~$25B annualized","growth":"Roughly doubling YoY, but reportedly missed internal targets","profitability":"Est. ~$33B 2026 GAAP loss; no positive cash flow projected for 4+ years","investors":"Microsoft, SoftBank, Nvidia, Amazon, Thrive","structure_notes":"Confidential S-1 Jun 8; massive compute commitments are the key concern; CFO reportedly flagged funding strain","filing_status":"confidential_reported","score":62,"rank":9,"comp":"{\"fund\":12,\"val\":8,\"uw\":15,\"mom\":19,\"struct\":4,\"time\":4}","thesis":"The biggest brand in the pipeline and the weakest unit economics: ~$25B revenue against a ~$33B projected loss and years of negative cash flow, at an $850B+ mark. It will get done on name alone, but on the numbers it ranks well below Anthropic — the score says buy the sector leader's economics, not just its fame.","source_url":"https://techcrunch.com/2026/06/08/openai-files-confidentially-for-ipo/","updated_at":"2026-08-11T03:00:00Z"},{"id":"discord","company":"Discord","ticker":null,"exchange":null,"sector":"Social / gaming communications","business":"Chat and community platform, 200M+ MAU, Nitro subscriptions","window":"Late 2026 – 2027","valuation":"~$8.5B secondary (vs $15B 2021 round)","raise":null,"underwriters":"Goldman Sachs, JPMorgan","revenue":"~$725M (2024); ~$550–560M ARR estimates","growth":"~29% YoY","profitability":"Undisclosed — S-1 will reveal","investors":"Baillie Gifford, Dragoneer, Fidelity, Franklin Templeton, Index, Greylock","structure_notes":"Confidential filing Jan 6, 2026; valuation compression vs 2021 is the sticking point","filing_status":"confidential_reported","score":59,"rank":10,"comp":"{\"fund\":13,\"val\":13,\"uw\":14,\"mom\":10,\"struct\":5,\"time\":4}","thesis":"The down-round dynamic cuts both ways: a ~$8.5B mark vs $15B in 2021 makes the entry price reasonable for a 200M-MAU franchise, but it's also why the deal keeps slipping. Worth owning at IPO pricing if profitability shows up in the S-1; the delay itself is the tell to watch.","source_url":"https://curvedtrading.com/articles/en/investing/discord-ipo/","updated_at":"2026-08-11T03:00:00Z"},{"id":"strava","company":"Strava","ticker":null,"exchange":null,"sector":"Consumer fitness / social","business":"Fitness-tracking social network, 180M+ registered athletes","window":"Late 2026","valuation":"~$2.2B (May 2025); $3B+ speculated","raise":null,"underwriters":"Goldman Sachs (lead confirmed)","revenue":"~$500M (2025, CEO-cited)","growth":null,"profitability":"CEO claims profitable since 2021 (unaudited)","investors":"TCV, Sequoia, Dragoneer","structure_notes":"Confidential draft confirmed Feb 2; timeline has slipped past the spring target","filing_status":"confidential_reported","score":58,"rank":11,"comp":"{\"fund\":15,\"val\":12,\"uw\":12,\"mom\":10,\"struct\":6,\"time\":3}","thesis":"Claimed profitability since 2021 on ~$500M revenue would make this the healthiest consumer-internet deal of the class — if audited numbers back it up. Slipped timeline and a cold consumer tape cap the score for now; upgrade on a public S-1.","source_url":"https://curvedtrading.com/articles/en/investing/strava-ipo/","updated_at":"2026-08-11T03:00:00Z"},{"id":"shieldai","company":"Shield AI","ticker":null,"exchange":null,"sector":"Defense tech / autonomous systems","business":"Hivemind AI pilot software and V-BAT autonomous drones","window":"Late 2026 – 2027","valuation":"$12.7B (2026 raise)","raise":null,"underwriters":null,"revenue":"~$540M projected 2026","growth":null,"profitability":null,"investors":"a16z, USIT Fund, Riot Ventures","structure_notes":"No filing; management signaling readiness; Anduril waiting til 2027+ leaves Shield AI as nearest large defense-tech name","filing_status":"expected","score":55,"rank":12,"comp":"{\"fund\":12,\"val\":10,\"uw\":7,\"mom\":17,\"struct\":6,\"time\":3}","thesis":"The defense-tech tape is the hottest sector backdrop on this list and Shield AI is its nearest large candidate — but with no filing, no banks named, and a rich $12.7B private mark against ~$540M projected revenue, this is a story to track, not yet a deal to rate highly.","source_url":"https://forgeglobal.com/shield-ai_ipo/","updated_at":"2026-08-11T03:00:00Z"},{"id":"plaid","company":"Plaid","ticker":null,"exchange":null,"sector":"Fintech infrastructure","business":"Bank-account connectivity APIs for fintech apps","window":"Late 2026 – 2027","valuation":"$6.1B (Apr 2025); $8–10B secondary marks","raise":null,"underwriters":null,"revenue":null,"growth":null,"profitability":null,"investors":"a16z, NEA, Index, Ribbit, Altimeter","structure_notes":"No filing; Bloomberg Jul 1 reported it is considering a US IPO; fintech comps already public","filing_status":"expected","score":54,"rank":13,"comp":"{\"fund\":13,\"val\":12,\"uw\":7,\"mom\":13,\"struct\":6,\"time\":3}","thesis":"A category-defining infrastructure asset whose 2025 reset ($6.1B vs $13B 2021) makes the entry math workable, with Chime and Klarna providing live comps. Everything now depends on an actual filing — until then it's a watchlist name.","source_url":"https://valueaddvc.com/blog/plaid-ipo-2026/","updated_at":"2026-08-11T03:00:00Z"},{"id":"hub","company":"Hub International","ticker":null,"exchange":null,"sector":"Insurance brokerage","business":"Top-5 North American insurance broker, ~21,000 employees","window":"Late 2026 – 2027","valuation":null,"raise":null,"underwriters":null,"revenue":null,"growth":null,"profitability":null,"investors":"Hellman & Friedman","structure_notes":"Confidential draft late Jun 2026; proceeds may repay debt; return to NYSE after 2007 take-private","filing_status":"confidential_reported","score":53,"rank":14,"comp":"{\"fund\":14,\"val\":10,\"uw\":7,\"mom\":12,\"struct\":5,\"time\":5}","thesis":"Insurance brokerage is a steady-compounder sector the market reliably pays up for (see AJG, BRO multiples), and Hub is a top-5 franchise. A PE-sponsored deal where proceeds repay sponsor-era debt warrants pricing discipline; score rises when terms and numbers surface.","source_url":"https://finance.yahoo.com/markets/stocks/articles/hub-international-files-confidentially","updated_at":"2026-08-11T03:00:00Z"},{"id":"consensys","company":"Consensys","ticker":null,"exchange":null,"sector":"Crypto / Ethereum infrastructure","business":"MetaMask, Infura and Linea — core Ethereum software","window":"Fall 2026","valuation":"~$7B (2022 Series D)","raise":null,"underwriters":"JPMorgan, Goldman Sachs (advisors)","revenue":null,"growth":null,"profitability":null,"investors":"Microsoft, SoftBank, Temasek, ParaFi","structure_notes":"No confirmed SEC filing; timing explicitly contingent on crypto window","filing_status":"expected","score":52,"rank":15,"comp":"{\"fund\":11,\"val\":10,\"uw\":12,\"mom\":13,\"struct\":4,\"time\":2}","thesis":"MetaMask gives Consensys the best-known consumer brand in crypto infrastructure, but with no filing, no disclosed revenue, and timing openly pegged to the crypto tape, this is the most conditional deal in the pipeline. The advisor names (JPM/GS) are the main reason it rates above the low 40s.","source_url":"https://www.coindesk.com/business/2026/05/13/consensys-delayed-ipo-fall","updated_at":"2026-08-11T03:00:00Z"},{"id":"grubmarket","company":"GrubMarket","ticker":null,"exchange":null,"sector":"Food tech / supply chain","business":"AI-enabled food supply-chain platform and wholesaler","window":"Late 2026 – early 2027","valuation":"$4.5B (Feb 2026)","raise":null,"underwriters":null,"revenue":">$2B (2024)","growth":"Heavily acquisition-driven","profitability":"Undisclosed","investors":"Future Food Fund, Portfolia, Liberty Street, RD Heritage","structure_notes":"Confidential S-1 Jul 28; diligence flag: previously settled claims tied to a reported ~$550M revenue overstatement","filing_status":"confidential_reported","score":48,"rank":16,"comp":"{\"fund\":14,\"val\":11,\"uw\":5,\"mom\":10,\"struct\":2,\"time\":6}","thesis":"$2B+ revenue at a $4.5B mark screens cheap — but the previously settled revenue-overstatement claims are a governance flag that dominates the score until audited S-1 numbers and a bank syndicate appear. Highest diligence-risk name on the board.","source_url":"https://techstartups.com/2026/07/28/grubmarket-confidentially-files/","updated_at":"2026-08-11T03:00:00Z"},{"id":"blockchain-com","company":"Blockchain.com","ticker":null,"exchange":null,"sector":"Crypto wallet / exchange","business":"Longstanding crypto wallet, exchange and institutional trading platform","window":"Late 2026 – 2027","valuation":"~$7B (down from $14B 2022 peak)","raise":null,"underwriters":null,"revenue":null,"growth":null,"profitability":null,"investors":"Lightspeed, GV, Lakestar, Baillie Gifford","structure_notes":"Confidential S-1 May 21, riding the crypto-listing rebound","filing_status":"confidential_reported","score":47,"rank":17,"comp":"{\"fund\":10,\"val\":10,\"uw\":5,\"mom\":14,\"struct\":4,\"time\":4}","thesis":"A confidential filing puts it ahead of the crypto names still on the fence, but with no disclosed financials, no banks named, and a halved valuation since 2022, it's a beta play on the crypto-listing window rather than a standalone story yet.","source_url":"https://www.coindesk.com/business/2026/05/21/blockchain-com-files-confidential","updated_at":"2026-08-11T03:00:00Z"},{"id":"vogenx","company":"Vogenx","ticker":"VOGX","exchange":"Nasdaq","sector":"Biotech (metabolic disease)","business":"Clinical-stage metabolic therapeutics — Phase 2 funding raise","window":"Aug–Sep 2026","valuation":null,"raise":"$75M (6.3M at $11–13)","underwriters":"JonesTrading","revenue":"Pre-revenue","growth":null,"profitability":"Clinical-stage losses","investors":null,"structure_notes":"Part of the active August biotech cluster (Braveheart +67%, Latigo, BlossomHill priced well)","filing_status":"terms_set","score":42,"rank":18,"comp":"{\"fund\":6,\"val\":9,\"uw\":4,\"mom\":12,\"struct\":5,\"time\":6}","thesis":"The August biotech window is genuinely hot, which is the only reason a pre-revenue Phase 2 story with a single mid-tier bookrunner clears 40. Binary clinical risk; position sizing is the whole game if played at all.","source_url":"https://www.renaissancecapital.com/IPO-Center/News/120490/","updated_at":"2026-08-11T03:00:00Z"},{"id":"londian-wason","company":"Londian Wason","ticker":"FOIL","exchange":"NYSE","sector":"Materials / battery components","business":"Chinese producer of copper foil for lithium-ion batteries","window":"Aug 2026 (week of Aug 10)","valuation":null,"raise":"$75M (3.6M at $20–22)","underwriters":"Cantor Fitzgerald, Huatai","revenue":null,"growth":null,"profitability":null,"investors":null,"structure_notes":"Small-float US listing of a Chinese issuer","filing_status":"terms_set","score":35,"rank":19,"comp":"{\"fund\":8,\"val\":8,\"uw\":6,\"mom\":7,\"struct\":2,\"time\":4}","thesis":"Small-float Chinese issuers on US exchanges have a long history of untradeable volatility and thin disclosure; nothing here suggests this one differs. Lowest rating on the board — tracked for completeness, not conviction.","source_url":"https://www.renaissancecapital.com/IPO-Center/Calendar","updated_at":"2026-08-11T03:00:00Z"}],"meta":{"last_refresh":"2026-08-11","ipo_market_context":"IPO market open but selective: ~99 deals / ~$145B raised YTD. Bending Spoons +53% and Lime +53% traded strongly; early-August biotechs priced well, but consumer deals (Jersey Mike's, Reformation) went flat. Summer calendar thin — issuers holding for a heavy fall slate anchored by Anthropic's reported October target, with Switch, Oura and Consensys behind it.","scoring_note":"Composite 0-100: Fundamentals /25, Valuation & entry /20, Underwriters /15, Sector momentum /20, Structure & lockup /10, Timing certainty /10"}};
+
+let boardData = { deals: [], ipos: [], meta: {} };
+let boardDataSource = null;   // 'live' | 'seed' | null
+let boardLastFetch = null;
+
+async function loadBoardData() {
+  let data = null;
+  try {
+    const res = await fetch(`${ALPACA_PROXY_URL}/board-data`, { cache: 'no-store' });
+    const body = await res.json();
+    if (res.ok && Array.isArray(body.deals)) { data = body; boardDataSource = 'live'; }
+  } catch { /* fall through to seed */ }
+  if (!data && SEED_BOARD_DATA) { data = SEED_BOARD_DATA; boardDataSource = 'seed'; }
+  if (!data) return;
+  boardData = data;
+  boardLastFetch = new Date();
+  renderDeals();
+  renderIpoRadar();
+  renderCommandCenter();
+  updateCcStamp();
+}
+
+function updateCcStamp() {
+  const el = document.getElementById('cc-updated');
+  if (!el) return;
+  const t = boardLastFetch ? boardLastFetch.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…';
+  const src = boardDataSource === 'seed'
+    ? ' · deal/IPO data from built-in snapshot (redeploy the Worker to go live)'
+    : boardData.meta && boardData.meta.last_refresh ? ` · research refreshed ${boardData.meta.last_refresh}` : '';
+  el.textContent = `updated ${t} · auto-refreshes every 10 min${src}`;
+}
+
+function relTime(iso) {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const h = ms / 36e5;
+  if (h < 1) return Math.max(1, Math.round(ms / 6e4)) + 'm ago';
+  if (h < 48) return Math.round(h) + 'h ago';
+  return Math.round(h / 24) + 'd ago';
+}
+
+const DEAL_BADGES = {
+  pending_regulatory: ['ds-regulatory', 'REGULATORY REVIEW'],
+  pending_vote: ['ds-vote', 'VOTE PENDING'],
+  pending_other: ['ds-other', 'CLOSING TRACK'],
+  rumored: ['ds-rumored', 'RUMORED / IN PLAY'],
+  closed: ['ds-closed', '✓ COMPLETED'],
+  terminated: ['ds-terminated', '✗ TERMINATED'],
+};
+function dealBadge(status) {
+  const [cls, label] = DEAL_BADGES[status] || ['ds-other', String(status || '').toUpperCase()];
+  return `<span class="deal-badge ${cls}">${label}</span>`;
+}
+const dealCleared = d => d.status === 'closed' || d.status === 'terminated';
+
+// Merger-arb spread: for all-cash deals, (offer − last close) / last close.
+// Lazy-loaded from /bars the first time the Deals tab is opened, then
+// cached; a stock-consideration deal shows its exchange ratio instead.
+const dealSpreadCache = {};
+async function loadDealSpreads() {
+  const cashDeals = (boardData.deals || []).filter(d => !dealCleared(d) && d.status !== 'rumored' && d.offer_cash > 0 && d.ticker && !(d.ticker in dealSpreadCache));
+  await Promise.all(cashDeals.slice(0, 20).map(async d => {
+    dealSpreadCache[d.ticker] = null;
+    try {
+      const end = new Date(), start = new Date(Date.now() - 10 * 864e5);
+      const ymd = x => x.toISOString().slice(0, 10);
+      const res = await fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(d.ticker)}&start=${ymd(start)}&end=${ymd(end)}`);
+      const data = await res.json();
+      const bars = data.bars || [];
+      if (bars.length) {
+        const last = bars[bars.length - 1].c;
+        if (last > 0) dealSpreadCache[d.ticker] = { last, spreadPct: (d.offer_cash - last) / last * 100 };
+      }
+    } catch { /* spread is a bonus, not a dependency */ }
+  }));
+  renderDeals();
+}
+
+function renderDeals() {
+  const body = document.getElementById('deals-body');
+  if (!body) return;
+  const deals = boardData.deals || [];
+  if (!deals.length) {
+    body.innerHTML = '<div class="status-box">No deal data yet — the Worker\'s /board-data endpoint returned nothing. Redeploy the Worker (wrangler deploy) and refresh.</div>';
+    return;
+  }
+  const live = deals.filter(d => !dealCleared(d) && d.status !== 'rumored');
+  const rumored = deals.filter(d => d.status === 'rumored');
+  const cleared = deals.filter(dealCleared);
+  const card = d => {
+    const sp = d.ticker && dealSpreadCache[d.ticker];
+    const spread = sp && d.offer_cash > 0
+      ? `<dt>Spread</dt><dd><span class="deal-spread ${sp.spreadPct >= 0 ? 'sp-pos' : 'sp-neg'}">${sp.spreadPct >= 0 ? '+' : ''}${sp.spreadPct.toFixed(1)}%</span> <span style="color:var(--text-muted)">(last $${sp.last.toFixed(2)} vs $${d.offer_cash.toFixed(2)})</span></dd>`
+      : '';
+    return `
+    <div class="deal-card ${dealCleared(d) ? 'deal-cleared' : ''}">
+      <div class="deal-top">
+        <div class="deal-target">${d.ticker ? tickerLink(d.ticker) + ' · ' : ''}${escHtml(d.target)}</div>
+        ${dealBadge(d.status)}
+      </div>
+      <div class="deal-acquirer">← ${escHtml(d.acquirer || '')}</div>
+      <dl class="deal-facts">
+        <dt>Offer</dt><dd>${escHtml(d.offer_price || '—')}</dd>
+        <dt>Value</dt><dd>${escHtml(d.deal_value || '—')}</dd>
+        ${d.expected_close ? `<dt>Close</dt><dd>${escHtml(d.expected_close)}</dd>` : ''}
+        ${d.close_date ? `<dt>${d.status === 'terminated' ? 'Broke' : 'Closed'}</dt><dd>${escHtml(d.close_date)}</dd>` : ''}
+        ${spread}
+      </dl>
+      ${d.stage_detail ? `<div class="deal-stage">${escHtml(d.stage_detail)}</div>` : ''}
+      ${d.risk_note ? `<div class="deal-risk">⚠ ${escHtml(d.risk_note)}</div>` : ''}
+      <div class="cc-actions">
+        ${d.ticker && !dealCleared(d) ? `<button class="chart-jump-btn" onclick="switchTab('charts'); loadChart('${escHtml(d.ticker)}')">chart →</button><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(d.ticker)}')">+ watch</button>` : ''}
+        ${d.source_url ? `<a class="fund-link" href="${escHtml(d.source_url)}" target="_blank" rel="noopener">source →</a>` : ''}
+        ${d.updated_at ? `<span class="cc-age">checked ${relTime(d.last_check || d.updated_at)}</span>` : ''}
+      </div>
+    </div>`;
+  };
+  body.innerHTML = `
+    <div class="section-label">Live deals — ${live.length} pending</div>
+    <div class="deal-grid">${live.map(card).join('')}</div>
+    ${rumored.length ? `<div class="section-label">Rumored / in play — pre-agreement, position sizing caution</div><div class="deal-grid">${rumored.map(card).join('')}</div>` : ''}
+    ${cleared.length ? `<div class="section-label">Recently cleared — auto-pruned after ~3 weeks</div><div class="deal-grid">${cleared.map(card).join('')}</div>` : ''}`;
+  if (!Object.keys(dealSpreadCache).length && ALPACA_PROXY_URL) loadDealSpreads();
+}
+
+// ── IPO RADAR ────────────────────────────────────────────────
+const IPO_STATUS_LABELS = {
+  terms_set: 'TERMS SET', s1_filed: 'S-1 FILED', f1_filed: 'F-1 FILED',
+  confidential_reported: 'CONFIDENTIAL S-1', expected: 'EXPECTED', priced: 'PRICED', postponed: 'POSTPONED',
+};
+const ipoScoreCls = s => s >= 65 ? 'ipo-s-high' : s >= 50 ? 'ipo-s-mid' : 'ipo-s-low';
+const IPO_COMP_LABELS = { fund: ['Fundamentals', 25], val: ['Valuation', 20], uw: ['Underwriters', 15], mom: ['Sector momentum', 20], struct: ['Structure', 10], time: ['Timing', 10] };
+
+function toggleIpoDetail(id) {
+  const row = document.getElementById('ipo-detail-' + id);
+  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+function renderIpoRadar() {
+  const body = document.getElementById('ipo-body');
+  if (!body) return;
+  const ipos = (boardData.ipos || []).slice().sort((a, b) => (a.rank || 99) - (b.rank || 99));
+  if (!ipos.length) {
+    body.innerHTML = '<div class="status-box">No IPO data yet — redeploy the Worker with /board-data and refresh.</div>';
+    return;
+  }
+  const ctx = boardData.meta && boardData.meta.ipo_market_context;
+  const rows = ipos.map(p => {
+    let comp = {};
+    try { comp = typeof p.comp === 'string' ? JSON.parse(p.comp) : (p.comp || {}); } catch { /* chips just won't render */ }
+    const chips = Object.entries(IPO_COMP_LABELS)
+      .map(([k, [label, max]]) => comp[k] != null ? `<span class="ipo-comp-chip" title="${label}: ${comp[k]} of ${max}">${label} ${comp[k]}/${max}</span>` : '').join('');
+    return `
+    <tr class="ipo-row" onclick="toggleIpoDetail('${p.id}')">
+      <td class="ipo-rank">#${p.rank}</td>
+      <td><div class="ipo-name">${escHtml(p.company)}${p.ticker ? `<span class="ipo-tick">${escHtml(p.ticker)}</span>` : ''}</div><div class="ipo-biz">${escHtml(p.business || '')}</div></td>
+      <td style="white-space:nowrap">${escHtml(p.window || '—')}</td>
+      <td>${escHtml(p.sector || '')}</td>
+      <td class="num" style="white-space:nowrap"><span class="ipo-scorebar"><i style="width:${p.score}%"></i></span><span class="ipo-score-pill ${ipoScoreCls(p.score)}">${p.score}</span></td>
+      <td><span class="deal-badge ${p.filing_status === 'terms_set' || p.filing_status === 's1_filed' ? 'ds-vote' : p.filing_status === 'expected' ? 'ds-rumored' : 'ds-other'}">${IPO_STATUS_LABELS[p.filing_status] || escHtml(p.filing_status || '')}</span></td>
+    </tr>
+    <tr class="ipo-detail-row" id="ipo-detail-${p.id}" style="display:none">
+      <td colspan="6">
+        <div class="ipo-detail-grid">
+          ${p.valuation ? `<div><b>Valuation</b>${escHtml(p.valuation)}</div>` : ''}
+          ${p.raise ? `<div><b>Raise</b>${escHtml(p.raise)}</div>` : ''}
+          ${p.underwriters ? `<div><b>Underwriters</b>${escHtml(p.underwriters)}</div>` : ''}
+          ${p.revenue ? `<div><b>Revenue</b>${escHtml(p.revenue)}</div>` : ''}
+          ${p.growth ? `<div><b>Growth</b>${escHtml(p.growth)}</div>` : ''}
+          ${p.profitability ? `<div><b>Profitability</b>${escHtml(p.profitability)}</div>` : ''}
+          ${p.investors ? `<div><b>Backers</b>${escHtml(p.investors)}</div>` : ''}
+          ${p.structure_notes ? `<div><b>Structure</b>${escHtml(p.structure_notes)}</div>` : ''}
+        </div>
+        ${p.thesis ? `<div class="ipo-thesis">${escHtml(p.thesis)}</div>` : ''}
+        <div class="ipo-comps">${chips}</div>
+        ${p.source_url ? `<a class="fund-link" href="${escHtml(p.source_url)}" target="_blank" rel="noopener">source →</a>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `
+    ${ctx ? `<div class="ipo-context"><b style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted)">MARKET CONTEXT — </b>${escHtml(ctx)}</div>` : ''}
+    <table class="data-table">
+      <thead><tr><th></th><th>Company</th><th>Window</th><th>Sector</th><th style="text-align:right">Score</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  renderIpoStrip(ipos);
+}
+
+function renderIpoStrip(ipos) {
+  const el = document.getElementById('cc-ipo-strip');
+  if (!el) return;
+  const top = ipos.filter(p => p.score >= 60).slice(0, 3);
+  if (!top.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.className = 'cc-ipo-strip';
+  el.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted)">IPO RADAR — TOP RATED</span>` +
+    top.map(p => `<span class="ipo-chip" onclick="switchTab('ipo'); toggleIpoDetail('${p.id}')"><b>${escHtml(p.company)}</b><span class="ipo-score-pill ${ipoScoreCls(p.score)}">${p.score}</span><span style="color:var(--text-muted)">${escHtml(p.window || '')}</span></span>`).join('') +
+    `<a class="fund-link" style="margin:0" href="javascript:void(0)" onclick="switchTab('ipo')">full ranking →</a>`;
+}
+
+function renderClearedStrip() {
+  const el = document.getElementById('cc-cleared');
+  if (!el) return;
+  const cutoff = Date.now() - 10 * 864e5; // show the last ~10 days of clears
+  const cleared = (boardData.deals || []).filter(d => dealCleared(d) && d.close_date && new Date(d.close_date).getTime() >= cutoff);
+  if (!cleared.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.className = 'cc-cleared';
+  el.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px">RECENTLY CLEARED — </span>` +
+    cleared.map(d => `<span class="clr-item"><span class="clr-tag">${d.status === 'terminated' ? '✗' : '✓'}</span>${escHtml(d.ticker || d.target)} → ${escHtml((d.acquirer || '').split('(')[0].trim())} <span style="font-size:9.5px">(${escHtml(d.close_date || '')})</span></span>`).join('');
+}
 
 // Curated watchlist of well-known institutional investors and their SEC CIK numbers.
 // Add more by finding a fund's CIK at https://www.sec.gov/cgi-bin/browse-edgar
@@ -1695,21 +2006,27 @@ function renderCampaigns() {
 // a board that never hides behind a tab.
 function computeConfluence() {
   const byKey = {};
-  const add = (key, label, src, pts, detail, link, ticker) => {
+  const add = (key, label, src, pts, detail, link, ticker, time) => {
     if (!key) return;
-    const e = byKey[key] = byKey[key] || { label, sources: new Set(), badges: [], pts: 0, details: [], links: [], ticker: null };
+    const e = byKey[key] = byKey[key] || { label, sources: new Set(), badges: [], pts: 0, details: [], links: [], ticker: null, latest: null };
     e.sources.add(src);
     e.pts += pts;
-    if (detail && e.details.length < 4 && !e.details.includes(detail)) e.details.push(detail);
+    if (detail && e.details.length < 5 && !e.details.includes(detail)) e.details.push(detail);
     if (link && e.links.length < 4 && !e.links.includes(link)) e.links.push(link);
     if (ticker) e.ticker = e.ticker || ticker;
     if (label && (!e.label || label.length < e.label.length)) e.label = label;
+    if (time && (!e.latest || new Date(time) > new Date(e.latest))) e.latest = time;
   };
   const fresh = (time, halfLifeDays) => {
     if (!time) return 0.5;
     const age = Math.max(0, (Date.now() - new Date(time).getTime()) / 86400e3);
     return Math.pow(0.5, age / halfLifeDays);
   };
+  // Freshness discipline (the fix for "same board for days"): half-lives
+  // are half what they were, and nothing whose newest supporting signal is
+  // older than MAX_AGE_DAYS can hold a card at all — old names decay off
+  // instead of squatting. (Everything still lives on in History/13D tabs.)
+  const MAX_AGE_DAYS = 21;
 
   // Stream 1+2: everything on the Top Signals board — live AND remembered
   // (insider buys/clusters, fund stake changes). Dollar value → log
@@ -1718,12 +2035,12 @@ function computeConfluence() {
     if (!(s.valueUsd > 0) || s.direction === 'sell') continue;
     const key = s.ticker ? 'T:' + s.ticker : null;
     if (!key) continue;
-    let pts = Math.max(0.5, Math.log10(s.valueUsd / 1e5)) * fresh(s.time, 14);
+    let pts = Math.max(0.5, Math.log10(s.valueUsd / 1e5)) * fresh(s.time, 7);
     let badge = null;
     if (s.cluster) { pts *= 1.8; badge = { cls: 'b-cluster', text: '👥 CLUSTER BUY' }; }
     else if (s.source === 'insider') badge = { cls: 'b-insider', text: '💼 INSIDER BUY' };
     else if (s.source === 'institution') badge = { cls: 'b-fund', text: '🏛 FUND STAKE' };
-    add(key, s.ticker, s.source + (s.cluster ? ':cluster' : ''), pts, s.detail, s.link, s.ticker);
+    add(key, s.ticker, s.source + (s.cluster ? ':cluster' : ''), pts, s.detail, s.link, s.ticker, s.time);
     const entry = byKey[key];
     if (badge && !entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
     if (s.context && !entry.details.includes(s.context)) entry.details.push('↳ ' + s.context);
@@ -1736,10 +2053,10 @@ function computeConfluence() {
   for (const r of sched13Filings) {
     if (r.tier < 2) continue;
     const key = r.ticker ? 'T:' + r.ticker : 'N:' + normName(r.subject);
-    let pts = r.tier * 2.2 * fresh(r.filed, 21);
+    let pts = r.tier * 2.2 * fresh(r.filed, 10);
     add(key, r.ticker || r.subject, 'sched13', pts,
       `${r.form === 'SCHEDULE 13D' ? 'New 13D' : '13D amendment'} by ${r.filers.slice(0, 2).join(', ')}${r.pct ? ' — ' + r.pct.toFixed(1) + '% stake' : ''}${r.pctDelta != null ? ` (${r.pctDelta > 0 ? '+' : ''}${r.pctDelta.toFixed(1)}pt vs prior)` : ''}`,
-      r.link, r.ticker || null);
+      r.link, r.ticker || null, r.filed);
     const entry = byKey[key];
     const badge = r.escalation ? { cls: 'b-escalation', text: '⚠ 13G→13D' }
       : r.activist ? { cls: 'b-13d', text: '★ ACTIVIST 13D' }
@@ -1751,10 +2068,37 @@ function computeConfluence() {
   for (const c of Object.values(campaignStore)) {
     if (campaignStage(c) !== 'proxy-fight' || !c.events.length) continue;
     const key = 'N:' + normName(c.company);
-    add(key, c.company, 'campaign', 2.5 * fresh(c.events[0].date, 30),
-      'Contested proxy fight underway — see Campaigns tab for the timeline', null, null);
+    add(key, c.company, 'campaign', 2.5 * fresh(c.events[0].date, 14),
+      'Contested proxy fight underway — see Campaigns tab for the timeline', null, null, c.events[0].date);
     const entry = byKey[key];
     if (!entry.badges.some(b => b.text === '⚔ PROXY FIGHT')) entry.badges.push({ cls: 'b-proxy', text: '⚔ PROXY FIGHT' });
+  }
+
+  // Stream 5: LIVE M&A DEALS (cloud board, refreshed daily + EDGAR-checked
+  // every 30 min). A pending deal is the hardest catalyst public markets
+  // print — it stacks with insider/13D activity on the same name, and a
+  // recently-updated deal (stage change, new approval) floats up while an
+  // untouched one decays. Closed/terminated deals never earn cards; they
+  // go to the "recently cleared" strip and then get pruned server-side.
+  for (const d of (boardData.deals || [])) {
+    if (dealCleared(d)) continue;
+    const key = d.ticker ? 'T:' + d.ticker : 'N:' + normName(d.target);
+    const isRumor = d.status === 'rumored';
+    const stagePts = d.status === 'pending_other' ? 4.2   // on the closing track — nearest catalyst
+      : d.status === 'pending_vote' ? 3.0
+      : isRumor ? 2.6                                     // fresh rumors are news; they decay fast below
+      : 2.2;                                              // regulatory long-haul
+    const t = d.updated_at || d.ann_date;
+    add(key, d.ticker || d.target, 'deal', stagePts * fresh(t, isRumor ? 5 : 10),
+      `${isRumor ? 'In play' : 'Live deal'}: ${d.acquirer}${d.offer_price && d.offer_price !== '—' ? ' @ ' + d.offer_price : ''}${d.expected_close ? ' — closes ' + d.expected_close : ''}`,
+      d.source_url, d.ticker || null, t);
+    const entry = byKey[key];
+    const badge = isRumor ? { cls: 'b-rumor', text: '💬 DEAL TALK' } : { cls: 'b-deal', text: '🤝 LIVE DEAL' };
+    if (!entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
+    if (d.stage_detail && entry.details.length < 5) {
+      const s = d.stage_detail.length > 120 ? d.stage_detail.slice(0, 117) + '…' : d.stage_detail;
+      if (!entry.details.includes(s)) entry.details.push(s);
+    }
   }
 
   // Merge name-keyed entries into ticker-keyed ones when an issuer name
@@ -1782,17 +2126,42 @@ function computeConfluence() {
   }
 
   return Object.values(byKey)
+    .filter(e => !e.latest || (Date.now() - new Date(e.latest).getTime()) / 864e5 <= MAX_AGE_DAYS)
     .map(e => ({ ...e, score: e.pts * (1 + 0.45 * (e.sources.size - 1)) }))
-    .filter(e => e.score >= 1.2)
+    .filter(e => e.score >= 1.4)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 6);
+    .slice(0, 9);
+}
+
+// First-seen memory: a card that arrived in the last 24h gets a pulsing
+// NEW badge, so a returning glance immediately shows what changed.
+const CC_SEEN_KEY = 'sd-cc-first-seen-v1';
+function ccFirstSeen(entries) {
+  const seen = sdMemGet(CC_SEEN_KEY, {});
+  const now = Date.now();
+  const keys = new Set();
+  for (const e of entries) {
+    const k = e.ticker || e.label;
+    keys.add(k);
+    if (!seen[k]) seen[k] = now;
+  }
+  for (const k of Object.keys(seen)) if (!keys.has(k) && now - seen[k] > 30 * 864e5) delete seen[k];
+  sdMemSet(CC_SEEN_KEY, seen);
+  return k => now - (seen[k] || now) < 24 * 36e5;
 }
 
 function renderCommandCenter() {
   const grid = document.getElementById('cc-grid');
   if (!grid) return;
   const entries = computeConfluence();
-  if (!entries.length) return; // keep the scanning placeholder until something earns a card
+  renderClearedStrip();
+  if (!entries.length) {
+    // Distinguish "still scanning" from "tape is quiet" — a board that
+    // says why it's empty is trustworthy; one showing week-old cards isn't.
+    if (boardLastFetch) grid.innerHTML = '<div class="cc-empty">Quiet tape right now — no name has a fresh stacked signal or near-term deal catalyst (signals older than 3 weeks age off this board; see History and the M&amp;A Deals tab for the long tail).</div>';
+    return;
+  }
+  const isNew = ccFirstSeen(entries);
   const maxScore = entries[0].score || 1;
   grid.innerHTML = entries.map(e => `
     <div class="cc-card ${e.sources.size >= 2 ? 'cc-hot' : ''}">
@@ -1803,11 +2172,12 @@ function renderCommandCenter() {
           <span class="cc-score-num">${e.score.toFixed(1)}</span>
         </div>
       </div>
-      <div class="cc-badges">${e.badges.map(b => `<span class="cc-badge ${b.cls}">${b.text}</span>`).join('')}${e.sources.size >= 2 ? '<span class="cc-badge" style="border-color:var(--amber-glow);color:var(--amber)">◈ ' + e.sources.size + ' STREAMS</span>' : ''}</div>
-      <div class="cc-detail">${e.details.slice(0, 3).map(d => `<div>${escHtml(d)}</div>`).join('')}</div>
+      <div class="cc-badges">${isNew(e.ticker || e.label) ? '<span class="cc-badge b-new">★ NEW</span>' : ''}${e.badges.map(b => `<span class="cc-badge ${b.cls}">${b.text}</span>`).join('')}${e.sources.size >= 2 ? '<span class="cc-badge" style="border-color:var(--amber-glow);color:var(--amber)">◈ ' + e.sources.size + ' STREAMS</span>' : ''}</div>
+      <div class="cc-detail">${e.details.slice(0, 4).map(d => `<div>${escHtml(d)}</div>`).join('')}</div>
       <div class="cc-actions">
         ${e.ticker ? `<button class="chart-jump-btn" onclick="switchTab('charts'); loadChart('${escHtml(e.ticker)}')">chart →</button><button class="chart-jump-btn" onclick="addToWatchlist('${escHtml(e.ticker)}')">+ watch</button>` : ''}
         ${e.links.slice(0, 2).map((l, i) => `<a class="fund-link" href="${escHtml(l)}" target="_blank" rel="noopener">filing ${i + 1} →</a>`).join('')}
+        ${e.latest ? `<span class="cc-age">newest signal ${relTime(e.latest)}</span>` : ''}
       </div>
     </div>
   `).join('');
@@ -3114,9 +3484,24 @@ loadInsiderTrades();
 loadSchedule13();
 loadInstitutions();
 loadCampaigns();
+loadBoardData();        // M&A deal board + IPO Radar from the cloud DB
 renderCampaigns();      // stored campaign history renders instantly, before feeds return
 renderCommandCenter();  // confluence board fills in as each stream lands
 renderTickerTape();
+
+// ── AUTO-REFRESH ─────────────────────────────────────────────
+// The old behavior — load once, show the same board until someone reloads
+// the page — is what made this feel frozen for days. Every 10 minutes the
+// fast-moving streams re-fetch and the confluence board re-scores; decay
+// alone changes ordering even on a quiet tape. (13F institutions reload
+// hourly — that data only legally changes quarterly.)
+setInterval(() => {
+  loadInsiderTrades();
+  loadSchedule13();
+  loadBoardData();
+}, 10 * 60 * 1000);
+setInterval(loadInstitutions, 60 * 60 * 1000);
+setInterval(() => { renderCommandCenter(); updateCcStamp(); }, 60 * 1000); // decay + age stamps tick every minute
 </script>
 <script>
 // ── HERO APHORISM ROTATION ────────────────────────────────────────────
