@@ -3079,7 +3079,42 @@ function removeFromWatchlist(symbol) {
 // the prevClose seeded once via /bars (see renderTickerTape/renderWatchlist
 // above) — % change is computed from those two each time a new trade or
 // quote arrives.
-const liveQuotes = {}; // symbol -> { last, prevClose }
+const liveQuotes = {}; // symbol -> { last, prevClose, lastBarDate, lastBarClose }
+
+// Today's calendar date in US market time — bar timestamps are compared
+// against THIS, not the browser's local date, so the tape is right for
+// users in any timezone.
+function etDateStr() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+// Seed a symbol's price + daily-% base from /bars correctly.
+// THE BUG THIS FIXES: the old code set prevClose = the NEWEST bar's own
+// close. During market hours Alpaca's daily bars include today's
+// (in-progress) bar, so the % change was measured against today's own
+// price — the tape read ~0.00% all session, and never showed yesterday's
+// close as the base. The daily % must always be (current − PREVIOUS
+// session's close) / previous session's close.
+function seedQuoteFromBars(sym, bars) {
+  if (!bars || !bars.length) return false;
+  const latest = bars[bars.length - 1];
+  const prior = bars.length > 1 ? bars[bars.length - 2] : null;
+  const latestDate = String(latest.t || '').slice(0, 10);
+  const q = liveQuotes[sym] = liveQuotes[sym] || {};
+  q.lastBarDate = latestDate;
+  q.lastBarClose = latest.c;
+  if (latestDate === etDateStr() && prior) {
+    // Market day in progress: today's bar exists → base is yesterday's close.
+    q.prevClose = prior.c;
+    q.last = q.last != null ? q.last : latest.c; // live stream may already be ahead
+  } else {
+    // Market closed (evening/weekend/holiday): show the last completed
+    // session's actual move (latest close vs the session before it).
+    q.prevClose = prior ? prior.c : latest.c;
+    if (q.last == null) q.last = latest.c;
+  }
+  return true;
+}
 let liveSocket = null;
 let liveReconnectTimer = null;
 let liveReconnectAttempts = 0;
@@ -3122,8 +3157,18 @@ function connectLiveStream() {
           ? msg.p
           : (msg.bp != null && msg.ap != null ? (msg.bp + msg.ap) / 2 : (msg.ap ?? msg.bp));
         if (price == null) continue;
-        liveQuotes[sym] = liveQuotes[sym] || {};
-        liveQuotes[sym].last = price;
+        const q = liveQuotes[sym] = liveQuotes[sym] || {};
+        // New trading session since we seeded from /bars (tab left open
+        // overnight): the last completed session's close becomes the new
+        // daily-change base, so the % doesn't stay pinned to a stale day.
+        if (q.lastBarDate && q.lastBarClose != null) {
+          const today = etDateStr();
+          if (today > q.lastBarDate) {
+            q.prevClose = q.lastBarClose;
+            q.lastBarDate = today;
+          }
+        }
+        q.last = price;
         updateLivePriceDisplays(sym);
       }
       // relay_status / relay_error are informational — surfaced in the
@@ -3216,11 +3261,7 @@ function renderTickerTape() {
     fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(sym)}&start=${ymd(start)}&end=${ymd(end)}`)
       .then(res => res.json().then(b => ({ ok: res.ok, b })))
       .then(({ ok, b }) => {
-        if (!ok || !b.bars || !b.bars.length) return null;
-        const last = b.bars[b.bars.length - 1];
-        liveQuotes[sym] = liveQuotes[sym] || {};
-        liveQuotes[sym].prevClose = last.c;
-        if (liveQuotes[sym].last == null) liveQuotes[sym].last = last.c;
+        if (!ok || !seedQuoteFromBars(sym, b.bars)) return null;
         return sym;
       })
       .catch(() => null)
@@ -3270,11 +3311,7 @@ async function renderWatchlist() {
     fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(sym)}&start=${ymd(start)}&end=${ymd(end)}`)
       .then(res => res.json().then(b => ({ ok: res.ok, b })))
       .then(({ ok, b }) => {
-        if (!ok || !b.bars || !b.bars.length) throw new Error('no data');
-        const last = b.bars[b.bars.length - 1];
-        liveQuotes[sym] = liveQuotes[sym] || {};
-        liveQuotes[sym].prevClose = last.c;
-        if (liveQuotes[sym].last == null) liveQuotes[sym].last = last.c;
+        if (!ok || !seedQuoteFromBars(sym, b.bars)) throw new Error('no data');
         updateLivePriceDisplays(sym);
       })
       .catch(() => {
