@@ -57,8 +57,13 @@ check "Most active" \
 check "Insider filing feed (SEC Form 4)" \
   "${WORKER_URL}/insider-feed"
 
-check "Congress trade feed" \
-  "${WORKER_URL}/congress-feed"
+# /congress-feed was removed from the worker (upstream dataset died) —
+# these are the routes it actually exposes now.
+check "SEC proxy (XBRL companyfacts reachability)" \
+  "${WORKER_URL}/sec-proxy?url=$(python3 -c "import urllib.parse;print(urllib.parse.quote('https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/OperatingIncomeLoss.json'))" 2>/dev/null || echo 'https%3A%2F%2Fdata.sec.gov%2Fapi%2Fxbrl%2Fcompanyconcept%2FCIK0000320193%2Fus-gaap%2FOperatingIncomeLoss.json')"
+
+check "13D alert scan status" \
+  "${WORKER_URL}/alerts-status"
 
 echo ""
 echo "Done. If any section above shows an error instead of data, paste that section back and I can tell you exactly what to fix."
