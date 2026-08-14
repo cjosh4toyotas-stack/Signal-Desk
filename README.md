@@ -1,29 +1,36 @@
-[README.md](https://github.com/user-attachments/files/30809614/README.md)
-# Signal-Desk
+[README.md](https://github.com/user-attachments/files/31068648/README.md)
+# Signal Desk — daily refresh on your Claude subscription (no API bill)
 
-Public Disclosure Tracker — surfaces what corporate insiders, hedge funds, and activists are legally required to disclose, stacks the streams that agree, and remembers what the rolling feeds forget.
+Runs the Signal Desk board refresh outside the Claude app with **no pay-per-token cost**: GitHub Actions (free tier) runs Claude Code headless, authenticated with your existing Claude subscription via a long-lived OAuth token. Claude Code's built-in WebSearch/WebFetch handles the research, and it writes to the D1 database with `curl` against Cloudflare's REST API.
 
-## What's on the board
+What it costs: nothing new. It draws from your Claude plan's usage allowance (the same pool your app sessions use) and GitHub's free Actions minutes (~5-15 min/run, well within the 2,000/month free tier for private repos).
 
-- **Confluence Board** (always visible, top of page) — names where multiple independent disclosure streams point at the same company: insider cluster + 13D + fund stake change beats any single signal. Multi-stream names get a score multiplier and a glowing card.
-- **Top Signals** — largest disclosed transactions, ranked by dollar value × freshness decay × quality weights (insider role: CFO > CEO > director; cluster premium; first-buy bonus).
-- **13D Watch** — live Schedule 13D/13G feed with activist-roster matching, opportunity tiers, parsed stake percentages, **13G→13D escalation flags** and **stake deltas vs the prior filing** (both from local memory).
-- **Campaigns** — per-company activist campaign timelines: stake built → escalation → proxy fight (PREC14A/DEFC14A/DFAN14A and variants), with approximate activist track records for orientation. History accumulates in your browser.
-- **Insider Trades** — open-market Form 4 purchases only (code P; grants/RSU/tax plumbing excluded), with **cluster detection** (2+ distinct insiders buying the same name) and price context (bought into weakness vs at highs).
-- **Hedge Funds (13F)** — live-parsed 13F information tables for a curated fund list, diffed quarter-over-quarter; fund detail page ranks new positions by **% of book (conviction)** and flags concentrated managers.
-- **Screener → ★ Activist Targets** — scores your watchlist + signal-surfaced names against the activist-target profile: 1Y underperformance vs SPY, drawdown, cheap P/E, gross-vs-net margin gap, influenceable size.
-- **Alerts** — the Cloudflare Worker runs a cron every 30 minutes, tiers new 13Ds, dedupes via KV, and pushes tier-2+ filings to your phone via [ntfy.sh](https://ntfy.sh). Check `/alerts-status` on the Worker for the last scan.
+## Setup (~10 minutes)
 
-The old Congress tab was removed — its upstream dataset (house-stock-watcher) stopped updating.
+1. On any machine with Claude Code installed, run:
 
-## Local memory
+   ```bash
+   claude setup-token
+   ```
 
-Feeds only show a rolling window. The app remembers what it has seen in `localStorage`: 13G→13D escalations, stake percentages across amendments, campaign timelines, and insider first-buy baselines. It gets smarter the longer you use it.
+   Approve in the browser; copy the token it prints. This token authenticates with your Pro/Max subscription, lasts one year, and can only make model requests. (Renew it annually the same way.)
 
-## Deploy
+2. Create a **private** GitHub repo and push these files.
 
-1. `npx wrangler deploy` in this directory (wrangler.toml already binds the Durable Object, the `signal-desk-memory` KV namespace, and the 30-minute alert cron).
-2. Secrets (once): `wrangler secret put APCA_API_KEY_ID`, `wrangler secret put APCA_API_SECRET_KEY` (Alpaca, free), optionally `FINNHUB_API_KEY` (free — enables valuation/margins in the target screener) and `NTFY_TOPIC` (a hard-to-guess ntfy.sh topic — enables push alerts; subscribe to the same topic in the ntfy app).
-3. Static pages (index.html / fund.html / stock.html) deploy anywhere (GitHub Pages). `ALPACA_PROXY_URL` in each file should point at the Worker.
+3. In the repo: Settings → Secrets and variables → Actions → add three secrets:
+   - `CLAUDE_CODE_OAUTH_TOKEN` — the token from step 1
+   - `CLOUDFLARE_API_TOKEN` — Cloudflare dashboard → My Profile → API Tokens → create token with **Account → D1 → Edit**
+   - `CLOUDFLARE_ACCOUNT_ID` — shown in the Cloudflare dashboard sidebar
 
-Not investment advice. Everything shown is public, legally mandated disclosure.
+4. Done. Runs weekdays 11:00 UTC; trigger manually anytime from the Actions tab. The run log ends with the refresh summary.
+
+## Reliability notes
+
+- GitHub emails you automatically if a run fails.
+- The OAuth token expires after one year — calendar a reminder to rerun `claude setup-token`.
+- If a run lands while you're heavily using Claude elsewhere, it shares your plan's rate limits; the workflow's cron hour is easy to move to a quiet time.
+- Once this is live, **pause the Cowork scheduled task** so two writers don't touch the board at once.
+
+## Alternative: run it on your own computer instead
+
+If you'd rather not use GitHub at all, the same thing works as a local cron/Task Scheduler job on any machine that's on at refresh time — same `claude -p "$(cat PROMPT.md)"` command, same env vars. GitHub Actions is just more reliable because it doesn't depend on your machine being awake.
