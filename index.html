@@ -2390,7 +2390,7 @@ function renderSched13() {
   const body = document.getElementById('watch13d-body');
   if (!sched13Filings.length) return;
   const rows = sched13Filter === 'OPP'
-    ? [...sched13Filings].filter(r => r.tier >= 2).sort((a, b) => b.tier - a.tier || new Date(b.filed) - new Date(a.filed))
+    ? [...sched13Filings].filter(r => r.tier >= 2).sort((a, b) => new Date(b.filed) - new Date(a.filed))
     : sched13Filings.filter(r =>
         sched13Filter === 'ALL' ? true
         : sched13Filter === 'NEW' ? r.form === 'SCHEDULE 13D'
