@@ -578,9 +578,9 @@ async function loadFundamentals() {
       [`Revenue (${fyLabel})`, m.revenue != null ? B(m.revenue) : null],
       [`Op. Income (${fyLabel})`, m.opInc != null ? B(m.opInc) : null],
       [`D&amp;A (${fyLabel})`, m.dna != null ? B(m.dna) : null],
-      ['Total Debt', m.debt != null ? B(m.debt) : null],
+      ['Total Debt' + (m.debtApprox || m.debtSuspect ? ' ⚠' : ''), m.debt != null ? (m.debtApprox ? '≈' : '') + B(m.debt) : null],
       ['Cash &amp; Equiv.', m.cash != null ? B(m.cash) : null],
-      ['Shares Out.', m.shares != null ? (m.shares / 1e6).toFixed(1) + 'M' : null],
+      ['Shares Out.' + (m.sharesAsOf ? ` (${escHtml(m.sharesAsOf)})` : ''), m.shares != null ? (m.shares / 1e6).toFixed(1) + 'M' : null],
     ].filter(([, v]) => v !== null);
 
     body.innerHTML = `<div class="stat-row">${rows.map(([label, val]) => `
@@ -590,9 +590,10 @@ async function loadFundamentals() {
         EBITDA computed as operating income + depreciation &amp; amortization from SEC XBRL filings —
         ${m.isTTM ? 'trailing twelve months through ' + escHtml(m.fyEnd || '') + ' (latest reported quarter)' : 'latest annual filing' + (m.fyEnd ? ', period ended ' + escHtml(m.fyEnd) : '')}.
         ${m.evEbitda == null && m.ebitda != null && m.ebitda <= 0 ? 'EV/EBITDA omitted — EBITDA is not positive.' : ''}
-        ${m.evApprox ? '* Debt or cash not disclosed under standard XBRL tags — enterprise value is approximate.' : ''}
+        ${m.evApprox ? '* Debt or cash incomplete under standard XBRL tags — enterprise value is approximate.' : ''}
         Not meaningful for banks, insurers, and most REITs.
-      </div>`;
+      </div>`
+    + (m.warnings && m.warnings.length ? `<div style="margin-top:6px;font-size:11px;color:var(--amber)">⚠ ${m.warnings.map(escHtml).join('<br>⚠ ')}</div>` : '');
     document.getElementById('fundamentals-note').textContent = m.isTTM ? 'via SEC XBRL · TTM' : 'via SEC XBRL company facts';
   } catch (err) {
     return loadFundamentalsFinnhub(body, err);
