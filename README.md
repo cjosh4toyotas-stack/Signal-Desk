@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/31068648/README.md)
+[README.md](https://github.com/user-attachments/files/31071111/README.md)
 # Signal Desk — daily refresh on your Claude subscription (no API bill)
 
 Runs the Signal Desk board refresh outside the Claude app with **no pay-per-token cost**: GitHub Actions (free tier) runs Claude Code headless, authenticated with your existing Claude subscription via a long-lived OAuth token. Claude Code's built-in WebSearch/WebFetch handles the research, and it writes to the D1 database with `curl` against Cloudflare's REST API.
