@@ -24,7 +24,7 @@
 window.SDFundamentals = (function () {
   'use strict';
 
-  const CACHE_KEY = 'sd_sec_fundamentals_v3';   // per-CIK computed facts, 24h TTL
+  const CACHE_KEY = 'sd_sec_fundamentals_v4';   // per-CIK computed facts, 24h TTL (v4: debt rescue + filed-first shares)
   const CIK_MAP_KEY = 'sd_ticker_cik_map_v1';   // ticker -> CIK map, 7d TTL
   const FACTS_TTL_MS = 24 * 3600 * 1000;
   const CIK_TTL_MS = 7 * 24 * 3600 * 1000;
@@ -48,7 +48,25 @@ window.SDFundamentals = (function () {
     ltDebtNoncurrent: ['LongTermDebtNoncurrent'],
     ltDebtCurrent: ['LongTermDebtCurrent'],
     ltDebtTotal: ['LongTermDebt', 'DebtLongtermAndShorttermCombinedAmount'],
+    // Interest expense — used as a sanity check on the debt figure. If a
+    // company pays $30M+/yr of interest, it does not have $6M of debt.
+    interest: ['InterestExpense', 'InterestExpenseDebt', 'InterestAndDebtExpense'],
   };
+
+  // Some filers (Centrus/LEU is the canonical case) carry their notes ONLY
+  // under instrument-specific tags — the generic LongTermDebt* concepts
+  // come back tiny or absent, which once reported $6M of "total debt"
+  // against $1.18B of actual notes. These are fetched as a RESCUE pass,
+  // only when the interest-coverage check says the standard tags look
+  // impossibly light. Concepts are grouped into families: tags within a
+  // family often re-tag the SAME instrument (take the max), while the
+  // families themselves are distinct instruments (sum across families).
+  const DEBT_RESCUE_FAMILIES = [
+    ['ConvertibleDebtNoncurrent', 'ConvertibleDebt',
+     'ConvertibleLongTermNotesPayable', 'ConvertibleNotesPayable'],       // max within
+    ['SeniorLongTermNotes', 'NotesPayableNoncurrent', 'LongTermNotesPayable'], // max within
+    ['SecuredLongTermDebt'], ['UnsecuredLongTermDebt'],                   // complementary — summed
+  ];
 
   // ── tiny localStorage helpers (storage may be unavailable — non-fatal)
   function lsGet(key) {
@@ -135,6 +153,23 @@ window.SDFundamentals = (function () {
       }
     }
     return null;
+  }
+
+  // Fetch EVERY tag in a list that exists (vs fetchConcept's first-hit).
+  // Used by the debt rescue pass, where a filer may carry several distinct
+  // instruments under several distinct concepts at once.
+  async function fetchConceptsAll(cik10, taxonomy, tagList) {
+    const found = [];
+    await Promise.all(tagList.map(async tag => {
+      try {
+        const url = `https://data.sec.gov/api/xbrl/companyconcept/CIK${cik10}/${taxonomy}/${tag}.json`;
+        const data = await secFetch(url);
+        if (data && data.units) found.push({ tag, units: data.units });
+      } catch (e) {
+        if (e.status && e.status !== 404) throw e;
+      }
+    }));
+    return found;
   }
 
   // Latest ANNUAL duration fact (10-K/20-F/40-F, ~a year long)
@@ -231,15 +266,20 @@ window.SDFundamentals = (function () {
   function latestShares(units) {
     const arr = (units && units.shares) || [];
     if (!arr.length) return null;
-    let maxEnd = '';
-    for (const f of arr) if (f.end && f.end > maxEnd) maxEnd = f.end;
-    const atEnd = arr.filter(f => f.end === maxEnd && f.val != null);
-    if (!atEnd.length) return null;
-    let bestAccn = '', bestFiled = '';
-    for (const f of atEnd) {
-      if ((f.filed || '') > bestFiled) { bestFiled = f.filed || ''; bestAccn = f.accn || ''; }
+    // Pick by most recent FILING first, then the latest as-of date within
+    // that filing. Picking the max as-of date across all history (the old
+    // way) can resurrect a stale fact from an old or amended filing —
+    // that's exactly how a years-old 13.7M share count once masqueraded
+    // as LEU's current count while the real figure was ~17.8M.
+    let bestFiled = '', bestAccn = '';
+    for (const f of arr) {
+      if (f.val != null && f.end && (f.filed || '') > bestFiled) { bestFiled = f.filed || ''; bestAccn = f.accn || ''; }
     }
-    const chosen = atEnd.filter(f => (f.accn || '') === bestAccn);
+    const inAccn = arr.filter(f => (f.accn || '') === bestAccn && f.val != null && f.end);
+    if (!inAccn.length) return null;
+    let maxEnd = '';
+    for (const f of inAccn) if (f.end > maxEnd) maxEnd = f.end;
+    const chosen = inAccn.filter(f => f.end === maxEnd);
     const seen = new Set();
     let total = 0;
     for (const f of chosen) {
@@ -248,7 +288,7 @@ window.SDFundamentals = (function () {
       seen.add(sig);
       total += f.val;
     }
-    return total > 0 ? { val: total, end: maxEnd } : null;
+    return total > 0 ? { val: total, end: maxEnd, filed: bestFiled } : null;
   }
 
   // ── core: assemble SEC-derived facts for one ticker (cached 24h) ─────
@@ -315,6 +355,45 @@ window.SDFundamentals = (function () {
         let debt = null;
         if (debtNcI || debtCurI) debt = (debtNcI ? debtNcI.val : 0) + (debtCurI ? debtCurI.val : 0);
         else if (debtTotI) debt = debtTotI.val;
+        // Prefer the combined tag when it's LARGER than the split sum —
+        // some filers put only a residual sliver under the split tags.
+        if (debtTotI && debt != null && debtTotI.val > debt) debt = debtTotI.val;
+
+        // ── Debt sanity: interest coverage + nonstandard-notes rescue ──
+        // If TTM interest expense implies far more debt than the standard
+        // tags disclose (e.g. > ~12% effective rate, an impossibility for
+        // an ongoing filer), scan the instrument-specific note/convertible
+        // concepts and take the larger answer. Flags stay on the facts so
+        // the UI can mark the figure as approximate instead of confident.
+        let debtApprox = false, debtSuspect = false;
+        let intTTM = null;
+        try {
+          const interest = await fetchConcept(cik10, 'us-gaap', TAGS.interest);
+          if (interest) {
+            const iE = latestPeriodEnd(interest.units);
+            const iT = iE ? trailingTwelve(interest.units, iE) : null;
+            if (iT && iT.val > 0) intTTM = iT.val;
+          }
+        } catch (e) { /* interest unavailable — sanity check simply skipped */ }
+        const debtLooksLight = intTTM != null && intTTM > 1e6 && (debt == null || debt < 8 * intTTM);
+        if (debtLooksLight) {
+          try {
+            let rescueSum = 0;
+            for (const family of DEBT_RESCUE_FAMILIES) {
+              const hits = await fetchConceptsAll(cik10, 'us-gaap', family);
+              let familyMax = 0;
+              for (const h of hits) {
+                const inst = latestInstant(h.units, 'USD');
+                if (inst && inst.val > familyMax) familyMax = inst.val;
+              }
+              rescueSum += familyMax;
+            }
+            if (rescueSum > (debt || 0)) { debt = rescueSum; debtApprox = true; }
+          } catch (e) { /* rescue is best-effort */ }
+          // still light after the rescue → surface the doubt rather than a
+          // confidently wrong number
+          debtSuspect = intTTM != null && intTTM > 1e6 && (debt == null || debt < 8 * intTTM);
+        }
 
         const fyStr = opA ? (opA.fy || (opA.end || '').slice(0, 4)) : null;
         const facts = {
@@ -328,10 +407,24 @@ window.SDFundamentals = (function () {
           revenue: rev,
           revenueSamePeriod: revSamePeriod,
           cash: cashI ? cashI.val : null,
+          cashAsOf: cashI ? cashI.end : null,
           debt,
+          debtAsOf: debtNcI ? debtNcI.end : (debtTotI ? debtTotI.end : null),
+          debtApprox,
+          debtSuspect,
+          interestTTM: intTTM,
           shares: sharesI ? sharesI.val : null,
           sharesAsOf: sharesI ? sharesI.end : null,
+          sharesFiled: sharesI ? (sharesI.filed || null) : null,
         };
+        // Warnings the UI should surface instead of silently trusting a tile
+        facts.warnings = [];
+        if (debtSuspect) facts.warnings.push(
+          `TTM interest expense (${fmtBig(intTTM)}) implies more debt than XBRL discloses — total debt and EV are likely understated.`);
+        else if (debtApprox) facts.warnings.push(
+          'Total debt recovered from instrument-specific note tags (standard tags were incomplete) — treat as approximate.');
+        if (facts.sharesAsOf && (Date.now() - new Date(facts.sharesAsOf).getTime()) > 400 * 864e5) facts.warnings.push(
+          `Share count is from a cover page dated ${facts.sharesAsOf} — over a year old; market cap may be stale.`);
         return saveFacts(t, facts);
       } catch (e) {
         // transient failure (rate limit, network) — don't cache, just degrade
@@ -369,7 +462,7 @@ window.SDFundamentals = (function () {
       out.marketCap = price * facts.shares;
       if (facts.ebitda != null && facts.ebitda > 0) {
         out.ev = out.marketCap + (facts.debt || 0) - (facts.cash || 0);
-        out.evApprox = (facts.debt == null || facts.cash == null);
+        out.evApprox = (facts.debt == null || facts.cash == null || !!facts.debtApprox || !!facts.debtSuspect);
         out.evEbitda = out.ev / facts.ebitda;
       }
     }
@@ -415,7 +508,7 @@ window.SDFundamentals = (function () {
       el.textContent = m.evEbitda.toFixed(1) + '×' + (m.evApprox ? '*' : '');
       const per = m.isTTM ? `TTM through ${m.fyEnd || '?'}` : `FY${m.fy || '?'}`;
       el.title = `EV/EBITDA vs ${per} EBITDA of ${fmtBig(m.ebitda)}`
-        + (m.evApprox ? ' (debt or cash not disclosed under standard tags — EV approximate)' : '')
+        + (m.warnings && m.warnings.length ? ' — ⚠ ' + m.warnings.join(' ') : (m.evApprox ? ' (debt or cash incomplete under standard tags — EV approximate)' : ''))
         + ' — source: SEC XBRL company facts';
       if (m.evEbitda < 10) el.style.color = 'var(--teal)';
       else if (m.evEbitda > 25) el.style.color = 'var(--rose)';
