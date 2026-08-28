@@ -1217,6 +1217,18 @@ function form4Val(el, tag) {
 
 function form4Bool(s) { return s === '1' || /^true$/i.test(s); }
 
+// PUBLIC-TICKERS-ONLY GUARD. EDGAR happily reports issuerTradingSymbol as
+// "NONE" or "N/A" for non-traded issuers (private REITs, BDC feeder funds,
+// co-ops) — real Form 4s, but nothing tradeable behind them. Without this
+// guard those filings mint confluence cards literally labeled "NONE".
+// Applied at Form 4 ingestion AND per-stream in computeConfluence, so no
+// stream (insider, 13D, deals) can surface a card without a real symbol.
+const NON_TICKER_VALUES = new Set(['NONE', 'N/A', 'NOT APPLICABLE', 'FALSE', 'NULL', 'PRIVATE', '-', '--']);
+function isRealTicker(sym) {
+  const s = String(sym || '').trim().toUpperCase();
+  return /^[A-Z][A-Z0-9.-]{0,9}$/.test(s) && !NON_TICKER_VALUES.has(s);
+}
+
 function parseForm4(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) return null;
@@ -1562,6 +1574,9 @@ async function loadInsiderTrades() {
         if (!r.xml) continue;
         const parsed = parseForm4(r.xml);
         if (!parsed) continue;
+        // Non-traded issuer (EDGAR symbol "NONE"/"N/A"/blank) — no public
+        // ticker means no chart, no arb, no confluence: skip entirely.
+        if (!isRealTicker(parsed.symbol)) continue;
         for (const s of summarizeForm4(parsed, byId[r.id])) {
           if (s.code === 'P') insiderPurchases.push(s);
           if (s.value >= INSIDER_SIGNAL_MIN_USD) insiderBigTrades.push(s);
@@ -2033,7 +2048,7 @@ function computeConfluence() {
   // points, so a $10M add doesn't drown a $600K CFO cluster.
   for (const s of combinedSignals()) {
     if (!(s.valueUsd > 0) || s.direction === 'sell') continue;
-    const key = s.ticker ? 'T:' + s.ticker : null;
+    const key = isRealTicker(s.ticker) ? 'T:' + s.ticker : null;
     if (!key) continue;
     let pts = Math.max(0.5, Math.log10(s.valueUsd / 1e5)) * fresh(s.time, 7);
     let badge = null;
@@ -2052,11 +2067,11 @@ function computeConfluence() {
   // ticker-less feed records key by company name and merge below.
   for (const r of sched13Filings) {
     if (r.tier < 2) continue;
-    const key = r.ticker ? 'T:' + r.ticker : 'N:' + normName(r.subject);
+    const key = isRealTicker(r.ticker) ? 'T:' + r.ticker : 'N:' + normName(r.subject);
     let pts = r.tier * 2.2 * fresh(r.filed, 10);
-    add(key, r.ticker || r.subject, 'sched13', pts,
+    add(key, (isRealTicker(r.ticker) ? r.ticker : r.subject), 'sched13', pts,
       `${r.form === 'SCHEDULE 13D' ? 'New 13D' : '13D amendment'} by ${r.filers.slice(0, 2).join(', ')}${r.pct ? ' — ' + r.pct.toFixed(1) + '% stake' : ''}${r.pctDelta != null ? ` (${r.pctDelta > 0 ? '+' : ''}${r.pctDelta.toFixed(1)}pt vs prior)` : ''}`,
-      r.link, r.ticker || null, r.filed);
+      r.link, (isRealTicker(r.ticker) ? r.ticker : null), r.filed);
     const entry = byKey[key];
     const badge = r.escalation ? { cls: 'b-escalation', text: '⚠ 13G→13D' }
       : r.activist ? { cls: 'b-13d', text: '★ ACTIVIST 13D' }
@@ -2082,14 +2097,17 @@ function computeConfluence() {
   // go to the "recently cleared" strip and then get pruned server-side.
   for (const d of (boardData.deals || [])) {
     if (dealCleared(d)) continue;
-    const key = d.ticker ? 'T:' + d.ticker : 'N:' + normName(d.target);
+    // Public-targets rule, client side: a deals row without a real ticker
+    // (private target that slipped past the DB sweep) never earns a card.
+    if (!isRealTicker(d.ticker)) continue;
+    const key = 'T:' + d.ticker;
     const isRumor = d.status === 'rumored';
     const stagePts = d.status === 'pending_other' ? 4.2   // on the closing track — nearest catalyst
       : d.status === 'pending_vote' ? 3.0
       : isRumor ? 2.6                                     // fresh rumors are news; they decay fast below
       : 2.2;                                              // regulatory long-haul
     const t = d.updated_at || d.ann_date;
-    add(key, d.ticker || d.target, 'deal', stagePts * fresh(t, isRumor ? 5 : 10),
+    add(key, d.ticker, 'deal', stagePts * fresh(t, isRumor ? 5 : 10),
       `${isRumor ? 'In play' : 'Live deal'}: ${d.acquirer}${d.offer_price && d.offer_price !== '—' ? ' @ ' + d.offer_price : ''}${d.expected_close ? ' — closes ' + d.expected_close : ''}`,
       d.source_url, d.ticker || null, t);
     const entry = byKey[key];
