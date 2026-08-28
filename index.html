@@ -1229,6 +1229,23 @@ function isRealTicker(sym) {
   return /^[A-Z][A-Z0-9.-]{0,9}$/.test(s) && !NON_TICKER_VALUES.has(s);
 }
 
+// EDGAR's getcurrent feed has grown flaky: individual requests stall for
+// 30s+ and time out, and one dead page-0 fetch used to flip the whole
+// insider stream to "unreachable" until the next 10-minute cycle. Retry
+// with a hard per-attempt timeout so a transient stall never kills a load.
+async function fetchWithRetry(url, opts = {}, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(25000) });
+      if (res.ok || res.status < 500 || i === tries - 1) return res;
+      lastErr = new Error('HTTP ' + res.status);
+    } catch (e) { lastErr = e; }
+    await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+  }
+  throw lastErr;
+}
+
 function parseForm4(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) return null;
@@ -1515,7 +1532,7 @@ async function loadInsiderTrades() {
     let newestMs = null, cutoffMs = null, reachedCutoff = false;
 
     for (let page = 0; page < INSIDER_MAX_PAGES && !reachedCutoff; page++) {
-      const res = await fetch(`${ALPACA_PROXY_URL}/insider-feed?start=${page * 100}`, { headers: { 'Accept': 'application/atom+xml' } });
+      const res = await fetchWithRetry(`${ALPACA_PROXY_URL}/insider-feed?start=${page * 100}`, { headers: { 'Accept': 'application/atom+xml' } });
       if (!res.ok) { if (page === 0) throw new Error('HTTP ' + res.status); break; }
       const text = await res.text();
       const xml = new DOMParser().parseFromString(text, 'application/xml');
@@ -1543,8 +1560,15 @@ async function loadInsiderTrades() {
         const id = `${m[1]}-${m[2]}`;
         if (seen.has(id)) continue;
         seen.add(id);
+        addedThisPage++;  // any new entry proves paging is advancing — count before the form filter
+        // EDGAR's type=4 filter is no longer honored server-side (verified
+        // 2026-08-28: the "type=4" feed came back as a mix of 424B2s, 497Ks
+        // and Form 4s). Filter by the entry's declared form type so
+        // prospectus junk never reaches /form4-batch.
+        const formType = (e.querySelector('category')?.getAttribute('term')
+          || (e.querySelector('title')?.textContent || '').split(' - ')[0]).trim().toUpperCase();
+        if (formType !== '4' && formType !== '4/A') continue;
         filings.push({ id, filed: updated, link: href });
-        addedThisPage++;
       }
       // Nothing new on this page (feed exhausted, or paging not honored) —
       // stop rather than refetching the same entries.
@@ -1565,7 +1589,7 @@ async function loadInsiderTrades() {
       const batch = filings.slice(i, i + FORM4_BATCH_SIZE);
       let results = [];
       try {
-        const res = await fetch(`${ALPACA_PROXY_URL}/form4-batch?ids=${batch.map(f => f.id).join(',')}`);
+        const res = await fetch(`${ALPACA_PROXY_URL}/form4-batch?ids=${batch.map(f => f.id).join(',')}`, { signal: AbortSignal.timeout(30000) });
         if (res.ok) results = (await res.json()).results || [];
       } catch (e) { /* individual batch failures are tolerable — keep going */ }
 
