@@ -140,6 +140,7 @@ export default {
     if (url.pathname === '/sec-proxy') return handleSecProxy(url);
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
     if (url.pathname === '/alerts-status') return handleAlertsStatus(env);
+    if (url.pathname === '/board-data') return handleBoardData(env);
 
     if (!env.APCA_API_KEY_ID || !env.APCA_API_SECRET_KEY) {
       return json({ error: 'Proxy is not configured with Alpaca credentials yet' }, 500);
@@ -150,7 +151,7 @@ export default {
     if (url.pathname === '/actives') return handleActives(url, env);
     if (url.pathname === '/stream') return handleStream(request, env);
 
-    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /cusip-batch, /sec-proxy, /fundamentals, /alerts-status, and /stream are exposed by this proxy.' }, 404);
+    return json({ error: 'Not found. Only /bars, /movers, /actives, /insider-feed, /form4-batch, /cusip-batch, /sec-proxy, /fundamentals, /alerts-status, /board-data, and /stream are exposed by this proxy.' }, 404);
   },
 
   // ── SCHEDULED ALERT SCAN ─────────────────────────────────────
@@ -168,8 +169,121 @@ export default {
   // /alerts-status), it just doesn't push anywhere.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runAlertScan(env));
+    ctx.waitUntil(runDealStatusScan(env));
   },
 };
+
+// ── GET /board-data
+// M&A deal board + IPO Radar, served from the D1 database "signal-desk-board"
+// (BOARD_DB binding in wrangler.toml). The daily Claude scheduled task writes
+// the research; runDealStatusScan below re-checks pending deals against EDGAR
+// every 30 minutes and auto-closes/prunes. The dashboard renders exactly what
+// this returns — no deal data lives in index.html beyond the day-one seed.
+async function handleBoardData(env) {
+  if (!env.BOARD_DB) {
+    return json({ error: 'BOARD_DB binding missing — add the d1_databases block to wrangler.toml and redeploy' }, 501);
+  }
+  try {
+    const [deals, ipos, meta] = await Promise.all([
+      env.BOARD_DB.prepare(
+        "SELECT * FROM deals ORDER BY CASE status WHEN 'closed' THEN 2 WHEN 'terminated' THEN 2 WHEN 'rumored' THEN 1 ELSE 0 END, COALESCE(ann_date,'') DESC"
+      ).all(),
+      env.BOARD_DB.prepare('SELECT * FROM ipos ORDER BY rank ASC').all(),
+      env.BOARD_DB.prepare('SELECT key, value FROM meta').all(),
+    ]);
+    const metaObj = {};
+    for (const row of meta.results || []) metaObj[row.key] = row.value;
+    return new Response(JSON.stringify({
+      deals: deals.results || [],
+      ipos: ipos.results || [],
+      meta: metaObj,
+      served_at: new Date().toISOString(),
+    }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...corsHeaders() },
+    });
+  } catch (err) {
+    return json({ error: 'D1 query failed: ' + err.message }, 500);
+  }
+}
+
+// ── DEAL STATUS SCAN (cron, every 30 min alongside the 13D scan)
+// For up to DEAL_SCAN_BATCH pending deals (least-recently-checked first),
+// read the target's EDGAR submissions index and look for completion
+// evidence filed after the announcement: a Form 25 / 25-NSE delisting, or
+// an 8-K with Item 2.01 (completion of acquisition) or 3.01 (delisting
+// notice). Found → status='closed' + optional ntfy push. Closed/terminated
+// rows older than 21 days are pruned so the board stays current.
+const DEAL_SCAN_BATCH = 8;
+
+async function runDealStatusScan(env) {
+  if (!env.BOARD_DB) return;
+  const status = { ran: new Date().toISOString(), checked: 0, closedDetected: 0, pruned: 0, errors: [] };
+  try {
+    const { results: deals } = await env.BOARD_DB.prepare(
+      "SELECT id, ticker, cik, ann_date FROM deals WHERE status LIKE 'pending%' AND cik IS NOT NULL ORDER BY COALESCE(last_check,'') ASC LIMIT ?"
+    ).bind(DEAL_SCAN_BATCH).all();
+    const now = new Date().toISOString();
+    for (const deal of deals || []) {
+      status.checked++;
+      try {
+        const cik10 = String(parseInt(deal.cik, 10)).padStart(10, '0');
+        const res = await fetch(`https://data.sec.gov/submissions/CIK${cik10}.json`, {
+          headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/json' },
+        });
+        if (!res.ok) throw new Error('EDGAR HTTP ' + res.status);
+        const sub = await res.json();
+        const recent = sub.filings && sub.filings.recent;
+        let closedEvidence = null;
+        if (recent && Array.isArray(recent.form)) {
+          const annTime = deal.ann_date ? new Date(deal.ann_date).getTime() : 0;
+          for (let i = 0; i < recent.form.length && i < 60; i++) {
+            const form = String(recent.form[i] || '').toUpperCase();
+            const filed = recent.filingDate ? recent.filingDate[i] : '';
+            if (filed && new Date(filed).getTime() < annTime) continue;
+            if (form === '25' || form === '25-NSE') { closedEvidence = `Form ${form} (delisting) filed ${filed}`; break; }
+            if (form === '8-K' || form === '8-K/A') {
+              const items = String((recent.items && recent.items[i]) || '');
+              if (items.includes('2.01') || items.includes('3.01')) {
+                closedEvidence = `8-K Item ${items.includes('2.01') ? '2.01 (completion)' : '3.01 (delisting notice)'} filed ${filed}`;
+                break;
+              }
+            }
+          }
+        }
+        if (closedEvidence) {
+          status.closedDetected++;
+          await env.BOARD_DB.prepare(
+            "UPDATE deals SET status='closed', close_date=?, stage_detail=?, updated_at=?, last_check=? WHERE id=?"
+          ).bind(now.slice(0, 10), 'Auto-detected as completed: ' + closedEvidence, now, now, deal.id).run();
+          if (env.NTFY_TOPIC) {
+            try {
+              await fetch('https://ntfy.sh/' + encodeURIComponent(env.NTFY_TOPIC), {
+                method: 'POST',
+                headers: { 'Title': `Deal closed: ${deal.ticker || deal.id}`, 'Tags': 'handshake' },
+                body: closedEvidence,
+              });
+            } catch { /* push is best-effort */ }
+          }
+        } else {
+          await env.BOARD_DB.prepare('UPDATE deals SET last_check=? WHERE id=?').bind(now, deal.id).run();
+        }
+      } catch (err) {
+        status.errors.push(`${deal.id}: ${err.message}`);
+      }
+    }
+    const cutoff = new Date(Date.now() - 21 * 86400e3).toISOString().slice(0, 10);
+    const del = await env.BOARD_DB.prepare(
+      "DELETE FROM deals WHERE status IN ('closed','terminated') AND COALESCE(close_date, substr(updated_at,1,10)) < ?"
+    ).bind(cutoff).run();
+    status.pruned = (del.meta && del.meta.changes) || 0;
+  } catch (err) {
+    status.errors.push(err.message);
+  }
+  if (env.SIGNAL_KV) {
+    try { await env.SIGNAL_KV.put('deal-scan:last', JSON.stringify(status)); } catch { /* non-fatal */ }
+  }
+  return status;
+}
 
 // ── GET /stream (WebSocket upgrade)
 // Live trade/quote relay. Browsers connect with wss://, send
@@ -637,7 +751,10 @@ async function mergeSched13History(env, records) {
     if (!rec || !rec.acc) continue;
     const prev = byAcc.get(rec.acc);
     if (!prev) byAcc.set(rec.acc, rec);
-    else if (rec.tickers && rec.tickers.length && !(prev.tickers || []).length) prev.tickers = rec.tickers;
+    else {
+      if (rec.tickers && rec.tickers.length && !(prev.tickers || []).length) prev.tickers = rec.tickers;
+      if (rec.kind && !prev.kind) { prev.kind = rec.kind; prev.flags = rec.flags; prev.pct = rec.pct; }
+    }
   }
   const cutoff = Date.now() - SCHED13_MAX_AGE_DAYS * 86400e3;
   const merged = [...byAcc.values()]
@@ -684,8 +801,82 @@ async function handleSched13History(env) {
   });
 }
 
+// ── WHAT KIND OF 13D — mirrors classify13D() in index.html ────
+// A 13D whose shares came from a securities purchase agreement /
+// convertible / warrant package (typically with a 9.99% ownership blocker)
+// is the COMPANY selling paper to the filer — dilution, not accumulation.
+// Those never push an alert and are stored with kind='financing' so the
+// dashboard demotes them without re-reading EDGAR. Keep this function
+// byte-for-byte in sync with the frontend copy.
+function classify13D(text) {
+  const t = String(text || '');
+  const count = re => (t.match(re) || []).length;
+  const flags = [];
+  const financingHits =
+    count(/securities purchase agreement/gi) + count(/subscription agreement/gi) + count(/private placement/gi) +
+    count(/\bPIPE\b/g) + count(/convertible (?:note|notes|debenture|debentures|preferred)/gi) + count(/\bdebentures?\b/gi) +
+    count(/purchase warrants?\b/gi) + count(/registration rights agreement/gi) + count(/additional investment right/gi) +
+    count(/conversion price/gi) + count(/stated value/gi) + count(/exercise price/gi);
+  const blocker = /beneficial ownership (?:limitation|restriction|cap|blocker)/i.test(t) || /\b[49]\.99\s*%/.test(t) || /ownership (?:limitation|restriction) of [49]\.99/i.test(t);
+  if (blocker) flags.push('9.99%-style ownership blocker');
+  if (/securities purchase agreement|subscription agreement|private placement/i.test(t)) flags.push('shares issued by the company (SPA / private placement)');
+  if (/convertible|debenture/i.test(t)) flags.push('convertible security');
+  if (/\bwarrants?\b/i.test(t) && financingHits >= 2) flags.push('warrants');
+  if (/additional investment right/i.test(t)) flags.push('further-investment right');
+  const dealHits = count(/voting agreement/gi) + count(/support agreement/gi) + count(/agreement and plan of merger/gi) + count(/merger agreement/gi) + count(/tender offer/gi);
+  const intentHits = count(/nominat(?:e|ion|ing|ed)/gi) + count(/proxy (?:contest|solicitation|fight|statement)/gi) +
+    count(/strategic (?:alternatives|review)/gi) + count(/sale of the (?:issuer|company)/gi) + count(/board (?:composition|representation|refresh|seats?)/gi) +
+    count(/letter to the (?:board|issuer|company)/gi) + count(/maximiz(?:e|ing) (?:shareholder|stockholder) value/gi) + count(/undervalued/gi) +
+    count(/unsolicited/gi) + count(/proposal to acquire/gi) + count(/going.private/gi) + count(/special meeting/gi);
+  const openMarketHits = count(/open[- ]market/gi);
+  const affiliate = /(?:director|officer|chairman|chief executive officer|founder|president) of the (?:issuer|company)/i.test(t) ||
+    /serves? as (?:a |the )?(?:director|chairman|chief executive)/i.test(t) || /employment agreement/i.test(t);
+  if (affiliate) flags.push('filer is a director/officer/founder of the issuer');
+  if (dealHits) flags.push('voting/merger agreement');
+  if (intentHits >= 2) flags.push('stated activist intent');
+  if (openMarketHits) flags.push('open-market purchases');
+  const strongFinancing = /securities purchase agreement|subscription agreement|private placement/i.test(t) && /convertible|debenture|warrant|preferred/i.test(t);
+  let kind = 'plain';
+  if (strongFinancing || financingHits >= 4 || (blocker && financingHits >= 1)) kind = 'financing';
+  else if (dealHits >= 2) kind = 'deal';
+  else if (intentHits >= 2) kind = 'activist';
+  else if (openMarketHits >= 1 && !affiliate) kind = 'accumulation';
+  else if (affiliate || blocker) kind = 'affiliate';
+  return { kind, flags, blocker, affiliate, openMarket: openMarketHits > 0, intent: intentHits >= 2 };
+}
+
+function parse13DPercent(text) {
+  const tagHits = [...text.matchAll(/<[^>/]*[Pp]ercent[^>]*>\s*([\d.]+)/g)]
+    .map(x => parseFloat(x[1])).filter(v => v > 0 && v <= 100);
+  if (tagHits.length) return Math.max(...tagHits);
+  const pm = text.match(/[Pp]ercent of class[\s\S]{0,300}?([\d.]+)\s*%/);
+  return pm ? parseFloat(pm[1]) : null;
+}
+
+// Read one 13D's full submission text and classify it. Cached in KV per
+// accession so each filing is read at most once across scans.
+async function readSched13(env, rec) {
+  const m = (rec.link || '').match(/\/data\/(\d+)\/(\d{18})\//);
+  if (!m) return null;
+  const key = 'sched13-read:' + rec.acc;
+  if (env.SIGNAL_KV) {
+    try { const c = await env.SIGNAL_KV.get(key, 'json'); if (c) return c; } catch { /* fall through */ }
+  }
+  const dashed = `${m[2].slice(0, 10)}-${m[2].slice(10, 12)}-${m[2].slice(12)}`;
+  const url = `https://www.sec.gov/Archives/edgar/data/${parseInt(m[1], 10)}/${m[2]}/${dashed}.txt`;
+  const res = await fetch(url, { headers: { 'User-Agent': SEC_USER_AGENT } });
+  if (!res.ok) throw new Error('EDGAR ' + res.status + ' reading ' + rec.acc);
+  const text = await res.text();
+  const cls = classify13D(text);
+  const out = { kind: cls.kind, flags: cls.flags, pct: parse13DPercent(text), at: new Date().toISOString() };
+  if (env.SIGNAL_KV) {
+    try { await env.SIGNAL_KV.put(key, JSON.stringify(out), { expirationTtl: 60 * 86400 }); } catch { /* non-fatal */ }
+  }
+  return out;
+}
+
 async function runAlertScan(env) {
-  const status = { ran: new Date().toISOString(), scanned: 0, alerted: 0, errors: [] };
+  const status = { ran: new Date().toISOString(), scanned: 0, alerted: 0, suppressedFinancing: 0, errors: [] };
   try {
     const feedUrl = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SCHEDULE+13D&company=&dateb=&owner=include&count=100&output=atom';
     const res = await fetch(feedUrl, { headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/atom+xml' } });
@@ -713,7 +904,32 @@ async function runAlertScan(env) {
       if (form) rec.form = form;
       byAcc.set(acc, rec);
     }
+    // EDGAR no longer honors the type= filter on getcurrent (verified
+    // 2026-08-28: the "SCHEDULE 13D" feed is ~95% 424B2/497K junk). Keep
+    // only real 13D/13G forms so junk never enters history or tiering.
+    for (const [acc, r] of byAcc) if (!/^SCHEDULE 13[DG]/.test(r.form)) byAcc.delete(acc);
     status.scanned = byAcc.size;
+
+    // Read every tier-2+ filing's text ONCE (KV-cached) and classify it
+    // before it can alert or enter history — a financing 13D is stored as
+    // such and never pushes. Capped per scan to respect the subrequest
+    // budget; anything left is picked up next run.
+    let reads = 0;
+    const readings = {};
+    for (const rec of byAcc.values()) {
+      const filerNames = rec.filers.join(' | ').toLowerCase();
+      const activist = ALERT_ACTIVIST_ROSTER.find(a => filerNames.includes(a)) || null;
+      const isNewD = rec.form === 'SCHEDULE 13D';
+      const isD = rec.form.startsWith('SCHEDULE 13D');
+      rec.tier = (isNewD && activist) ? 3 : (isNewD || (isD && activist)) ? 2 : isD ? 1 : 0;
+      rec.activist = activist;
+      if (rec.tier < 2 || reads >= 15) continue;
+      try {
+        const cached = env.SIGNAL_KV ? await env.SIGNAL_KV.get('sched13-read:' + rec.acc, 'json') : null;
+        if (!cached) reads++;
+        readings[rec.acc] = cached || await readSched13(env, rec);
+      } catch (err) { status.errors.push(err.message); }
+    }
 
     // Persist everything this scan saw into the rolling 13D history — this
     // is what lets the frontend's ★ Opportunities view accumulate 24/7
@@ -722,18 +938,20 @@ async function runAlertScan(env) {
       await mergeSched13History(env, [...byAcc.values()].map(r => ({
         acc: r.acc, form: r.form, filed: r.filed, link: r.link,
         subject: r.subject, tickers: [], filers: r.filers,
+        kind: readings[r.acc] ? readings[r.acc].kind : undefined,
+        flags: readings[r.acc] ? readings[r.acc].flags : undefined,
+        pct: readings[r.acc] ? readings[r.acc].pct : undefined,
       })));
     } catch (err) {
       status.errors.push('history merge failed: ' + err.message);
     }
 
     for (const rec of byAcc.values()) {
-      const filerNames = rec.filers.join(' | ').toLowerCase();
-      const activist = ALERT_ACTIVIST_ROSTER.find(a => filerNames.includes(a)) || null;
+      const { tier, activist } = rec;
       const isNewD = rec.form === 'SCHEDULE 13D';
-      const isD = rec.form.startsWith('SCHEDULE 13D');
-      const tier = (isNewD && activist) ? 3 : (isNewD || (isD && activist)) ? 2 : isD ? 1 : 0;
       if (tier < 2) continue;
+      const reading = readings[rec.acc];
+      if (!reading) continue; // unread this scan (budget) — alert decision waits for the next run
 
       // Dedupe: alert each accession exactly once.
       if (env.SIGNAL_KV) {
@@ -742,12 +960,20 @@ async function runAlertScan(env) {
         await env.SIGNAL_KV.put('alerted:' + rec.acc, '1', { expirationTtl: 14 * 86400 });
       }
 
+      // The metric fix: a financing 13D is not an accumulation signal. It
+      // is recorded (history carries kind='financing') but never pushed.
+      if (reading.kind === 'financing') { status.suppressedFinancing++; continue; }
+
       status.alerted++;
       if (env.NTFY_TOPIC) {
+        const kindTag = reading.kind === 'activist' ? ' · stated activist intent'
+          : reading.kind === 'accumulation' ? ' · open-market buying'
+          : reading.kind === 'affiliate' ? ' · insider-affiliated filer'
+          : reading.kind === 'deal' ? ' · deal-linked' : '';
         const title = tier >= 3
           ? `★ ACTIVIST 13D: ${rec.subject || 'unknown target'}`
           : `13D ${isNewD ? 'filed' : 'amended'}: ${rec.subject || 'unknown target'}`;
-        const body = `${rec.form} — filed by ${rec.filers.join(', ') || 'unknown'}${activist ? ` (roster match: ${activist})` : ''}\n${rec.link}`;
+        const body = `${rec.form} — filed by ${rec.filers.join(', ') || 'unknown'}${activist ? ` (roster match: ${activist})` : ''}${reading.pct != null ? ` — ${reading.pct.toFixed(1)}% stake` : ''}${kindTag}\n${rec.link}`;
         try {
           await fetch('https://ntfy.sh/' + encodeURIComponent(env.NTFY_TOPIC), {
             method: 'POST',
