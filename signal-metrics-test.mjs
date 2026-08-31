@@ -55,7 +55,16 @@ t('$1M in a $5B mid-cap (2 bp) is neutral 1×', Math.abs(materialityMult(mid) - 
 t('microcap CEO buy outranks megacap buy after scaling', micro.valueUsd * materialityMult(micro) > mega.valueUsd * materialityMult(mega) * 0.5);
 t('unknown market cap is neutral', materialityMult({ ticker: 'NOPE', valueUsd: 1e6 }) === 1);
 t('confluence clamp honored (0.5–2.5)', materialityMult(micro, 0.5, 2.5) === 2.5 && materialityMult(mega, 0.5, 2.5) === 0.5);
-t('Top Signals score uses materialityMult', /score: \(s\.sortValue \|\| s\.valueUsd\) \* materialityMult\(s\)/.test(html));
+t('Top Signals score uses materialityMult', /score: base \* materialityMult\(s\)/.test(html));
+// 13F staleness: quarter-end snapshots rank by conviction and fade fast
+const grab = name => { const i = html.indexOf('function ' + name); return html.slice(i, html.indexOf('\n}\n', i) + 2); };
+const f13 = new Function(grab('quarterEndBefore') + grab('institutionSortValue') + grab('pctBookOf') + '; return { quarterEndBefore, institutionSortValue, pctBookOf };')();
+t('13F filed Aug 14 is labeled as-of Jun 30', f13.quarterEndBefore('2026-08-14') === '6/30/2026');
+t('13F filed Feb 12 is labeled as-of prior Dec 31', f13.quarterEndBefore('2027-02-12') === '12/31/2026');
+t('13F rank value scales with % of book, not dollars', f13.institutionSortValue(4) === 4e6 && f13.institutionSortValue(40) === 15e6);
+t('legacy remembered 13F rows recover % of book from text', f13.pctBookOf({ detail: 'EXITED entirely — sold (was 7.4% of the book)' }) === 7.4);
+t('13F rows use a short half-life and 21-day cutoff', /SIGNAL_13F_HALF_LIFE_DAYS = 4/.test(html) && /SIGNAL_13F_MAX_AGE_DAYS = 21/.test(html) && /inst \? SIGNAL_13F_HALF_LIFE_DAYS : SIGNAL_HALF_LIFE_DAYS/.test(html));
+t('13F detail states the as-of date', /holdings as of \$\{asOf\}/.test(html));
 t('market cap fetched for sells too (not just buys)', /ranked\.filter\(x => x\.ticker\)\.map\(x => x\.ticker\)/.test(html));
 
 console.log(`\n${pass} passed, ${fail} failed`);
