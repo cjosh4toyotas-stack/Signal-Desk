@@ -22,15 +22,17 @@ const env = {
 };
 
 const mod = await import('./alpaca-proxy-worker.js');
-let done; const ctx = { waitUntil: p => (done = p) };
+// scheduled() registers several jobs (13D scan + deal-status scan) — await all of them.
+const pending = []; const ctx = { waitUntil: p => pending.push(p) };
+const drain = () => Promise.all(pending.splice(0));
 
-mod.default.scheduled({}, env, ctx); await done;
+mod.default.scheduled({}, env, ctx); await drain();
 const s1 = JSON.parse(kv.get('alerts:last'));
 console.log(`run1: scanned=${s1.scanned} alerted=${s1.alerted} pushes=${pushes.length} errors=${s1.errors}`);
 console.log('push:', JSON.stringify(pushes[0] || null));
 
 const p1 = pushes.length; pushes.length = 0;
-mod.default.scheduled({}, env, ctx); await done;
+mod.default.scheduled({}, env, ctx); await drain();
 const s2 = JSON.parse(kv.get('alerts:last'));
 console.log(`run2 (dedupe): scanned=${s2.scanned} alerted=${s2.alerted} pushes=${pushes.length}`);
 
