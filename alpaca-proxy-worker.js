@@ -90,7 +90,110 @@ const ALLOWED_ORIGIN = '*'; // '*' so the dashboard works both locally (file://)
 // contact — browsers block JS from setting User-Agent, which is exactly
 // why /insider-feed and /congress-feed have to be proxied server-side here
 // rather than fetched directly from the page. EDIT THIS to something real.
-const SEC_USER_AGENT = 'Signal Desk contact@example.com';
+const SEC_USER_AGENT = 'Signal Desk jahloverules@gmail.com';
+
+// ── SEC FETCH DISCIPLINE ──────────────────────────────────────
+// EDGAR allows 10 requests/second per IP and answers a burst above that
+// with HTTP 429 + a 10-minute block that EXTENDS if you keep knocking. Every
+// dashboard tab funnels its EDGAR traffic through this one Worker (one
+// egress IP), and /form4-batch used to fire up to 20 fetches at once — so
+// the whole desk would go dark ("Insiders · unreachable", 13D spinner)
+// whenever a page load coincided with a scan. All EDGAR traffic now goes
+// through secFetch():
+//   • at most SEC_MAX_CONCURRENCY in flight, ≥ SEC_MIN_GAP_MS apart (≈ 6/s)
+//   • immutable /Archives/ documents cached in memory + KV (never re-read)
+//   • live feeds cached in memory for a short TTL (a reload is free)
+//   • on a 429 the Worker stops calling EDGAR for SEC_BACKOFF_MS and
+//     answers 429 itself, so the block lifts instead of extending
+const SEC_MAX_CONCURRENCY = 3;
+const SEC_MIN_GAP_MS = 160;
+const SEC_BACKOFF_MS = 65_000;
+const SEC_MEM_MAX = 80;             // in-memory entries (per isolate)
+const SEC_KV_MAX_BYTES = 2_000_000; // archive docs above this stay memory-only
+let secInFlight = 0;
+let secLastStart = 0;
+let secBlockedUntil = 0;
+const secMem = new Map();           // url -> { exp, status, ct, body:string }
+
+function secCacheTtl(url) {
+  if (/^https:\/\/www\.sec\.gov\/Archives\/edgar\/data\//.test(url)) return 30 * 86400e3; // filings never change
+  if (/\/files\/company_tickers\.json/.test(url)) return 86400e3;
+  if (/data\.sec\.gov\/submissions\//.test(url)) return 10 * 60e3;
+  if (/efts\.sec\.gov\//.test(url)) return 120e3;
+  if (/browse-edgar\?action=getcurrent/.test(url)) return 45e3;
+  return 60e3;
+}
+
+function secMemPut(url, entry) {
+  secMem.set(url, entry);
+  if (secMem.size > SEC_MEM_MAX) {
+    const oldest = [...secMem.entries()].sort((a, b) => a[1].exp - b[1].exp)[0];
+    if (oldest) secMem.delete(oldest[0]);
+  }
+}
+
+function secResponse(entry) {
+  return new Response(entry.body, { status: entry.status, headers: { 'Content-Type': entry.ct } });
+}
+
+// Slot acquisition is serialized through a promise chain so a burst of
+// parallel callers can't all pass the checks at once (which is exactly the
+// race that produced 20-at-a-time bursts before).
+let secChain = Promise.resolve();
+function secSlot() {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const mine = secChain.then(async () => {
+    while (secInFlight >= SEC_MAX_CONCURRENCY) await sleep(40);
+    const wait = secLastStart + SEC_MIN_GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    secLastStart = Date.now();
+    secInFlight++;
+  });
+  secChain = mine.catch(() => {});
+  return mine;
+}
+
+// Drop-in for fetch(url, { headers }) against sec.gov. Returns a Response.
+// `env` is optional; with SIGNAL_KV bound, archive documents persist across
+// isolates so a filing is read from EDGAR at most once, ever.
+async function secFetch(url, opts = {}, env = null) {
+  const now = Date.now();
+  const hit = secMem.get(url);
+  if (hit && hit.exp > now) return secResponse(hit);
+  const ttl = secCacheTtl(url);
+  const archival = ttl >= 86400e3;
+  const kvKey = 'sec:' + url;
+  if (archival && env && env.SIGNAL_KV) {
+    try {
+      const kv = await env.SIGNAL_KV.get(kvKey, 'json');
+      if (kv && kv.body != null) { secMemPut(url, { ...kv, exp: now + ttl }); return secResponse(kv); }
+    } catch { /* fall through to network */ }
+  }
+  if (secBlockedUntil > now) {
+    return new Response('EDGAR rate limit back-off in effect (worker-side)', { status: 429, headers: { 'Content-Type': 'text/plain', 'Retry-After': String(Math.ceil((secBlockedUntil - now) / 1000)) } });
+  }
+  await secSlot();
+  let res;
+  try {
+    res = await fetch(url, { ...opts, headers: { 'User-Agent': SEC_USER_AGENT, ...(opts.headers || {}) } });
+  } finally {
+    secInFlight--;
+  }
+  if (res.status === 429 || res.status === 403) {
+    secBlockedUntil = Date.now() + SEC_BACKOFF_MS;
+    return res;
+  }
+  // Mocked responses in the unit tests are plain objects — pass them through.
+  if (!res.ok || typeof res.text !== 'function' || !res.headers || typeof res.headers.get !== 'function') return res;
+  const body = await res.text();
+  const entry = { exp: Date.now() + ttl, status: res.status, ct: res.headers.get('Content-Type') || 'application/octet-stream', body };
+  secMemPut(url, entry);
+  if (archival && env && env.SIGNAL_KV && body.length <= SEC_KV_MAX_BYTES) {
+    try { await env.SIGNAL_KV.put(kvKey, JSON.stringify({ status: entry.status, ct: entry.ct, body }), { expirationTtl: 30 * 86400 }); } catch { /* non-fatal */ }
+  }
+  return secResponse(entry);
+}
+
 
 const ALPACA_BASE = 'https://data.alpaca.markets';
 const TICKER_RE = /^[A-Z.]{1,10}$/;
@@ -134,10 +237,10 @@ export default {
     // check them before the Alpaca credential gate below, so none of them
     // depend on Alpaca keys being configured.
     if (url.pathname === '/insider-feed') return handleInsiderFeed(url);
-    if (url.pathname === '/form4-batch') return handleForm4Batch(url);
+    if (url.pathname === '/form4-batch') return handleForm4Batch(url, env);
     if (url.pathname === '/cusip-batch') return handleCusipBatch(url, env, ctx);
     if (url.pathname === '/sched13-history') return handleSched13History(env);
-    if (url.pathname === '/sec-proxy') return handleSecProxy(url);
+    if (url.pathname === '/sec-proxy') return handleSecProxy(url, env);
     if (url.pathname === '/fundamentals') return handleFundamentals(url, env);
     if (url.pathname === '/alerts-status') return handleAlertsStatus(env);
     if (url.pathname === '/board-data') return handleBoardData(env);
@@ -227,9 +330,9 @@ async function runDealStatusScan(env) {
       status.checked++;
       try {
         const cik10 = String(parseInt(deal.cik, 10)).padStart(10, '0');
-        const res = await fetch(`https://data.sec.gov/submissions/CIK${cik10}.json`, {
-          headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/json' },
-        });
+        const res = await secFetch(`https://data.sec.gov/submissions/CIK${cik10}.json`, {
+          headers: { 'Accept': 'application/json' },
+        }, env);
         if (!res.ok) throw new Error('EDGAR HTTP ' + res.status);
         const sub = await res.json();
         const recent = sub.filings && sub.filings.recent;
@@ -438,12 +541,7 @@ async function handleInsiderFeed(url) {
 
     let upstream;
     try {
-      upstream = await fetch(feedUrl, {
-        headers: {
-          'User-Agent': SEC_USER_AGENT,
-          'Accept': 'application/atom+xml',
-        },
-      });
+      upstream = await secFetch(feedUrl, { headers: { 'Accept': 'application/atom+xml' } });
     } catch (err) {
       return json({ error: 'Upstream fetch failed: ' + err.message }, 502);
     }
@@ -470,7 +568,7 @@ async function handleInsiderFeed(url) {
 // inside Workers' subrequest limit.
 const FORM4_ID_RE = /^\d{1,10}-\d{18}$/;
 
-async function handleForm4Batch(url) {
+async function handleForm4Batch(url, env) {
     const ids = (url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean);
     if (!ids.length) return json({ error: 'ids required: comma-separated cik-accession pairs (accession as 18 digits, no dashes)' }, 400);
     if (ids.length > 20) return json({ error: 'Max 20 ids per batch' }, 400);
@@ -488,7 +586,7 @@ async function handleForm4Batch(url) {
       // directory listing needed.
       const txtUrl = `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${acc}/${accDashed}.txt`;
       try {
-        const res = await fetch(txtUrl, { headers: { 'User-Agent': SEC_USER_AGENT } });
+        const res = await secFetch(txtUrl, {}, env);
         if (!res.ok) return { id, error: 'HTTP ' + res.status };
         const text = await res.text();
         const startIdx = text.indexOf('<ownershipDocument');
@@ -532,9 +630,7 @@ async function getSecNameIndex(env) {
   // Daily-cached map of normalized company title -> ticker.
   const cached = await env.SIGNAL_KV.get('sec-name-index', 'json');
   if (cached) return cached;
-  const res = await fetch('https://www.sec.gov/files/company_tickers.json', {
-    headers: { 'User-Agent': SEC_USER_AGENT },
-  });
+  const res = await secFetch('https://www.sec.gov/files/company_tickers.json', {}, env);
   if (!res.ok) return null;
   const data = await res.json();
   const index = {};
@@ -644,7 +740,7 @@ const SEC_PROXY_ALLOWED = [
   'https://efts.sec.gov/', // EDGAR full-text search API (JSON)
 ];
 
-async function handleSecProxy(url) {
+async function handleSecProxy(url, env) {
     const target = url.searchParams.get('url') || '';
     if (!SEC_PROXY_ALLOWED.some(prefix => target.startsWith(prefix))) {
       return json({ error: 'Only SEC EDGAR URLs (www.sec.gov/Archives, browse-edgar, data.sec.gov) can be proxied' }, 400);
@@ -652,16 +748,18 @@ async function handleSecProxy(url) {
 
     let upstream;
     try {
-      upstream = await fetch(target, { headers: { 'User-Agent': SEC_USER_AGENT } });
+      upstream = await secFetch(target, {}, env);
     } catch (err) {
       return json({ error: 'Upstream fetch failed: ' + err.message }, 502);
     }
 
     const body = await upstream.arrayBuffer();
+    const retryAfter = upstream.headers.get('Retry-After');
     return new Response(body, {
       status: upstream.status,
       headers: {
         'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+        ...(retryAfter ? { 'Retry-After': retryAfter } : {}),
         ...corsHeaders(),
       },
     });
@@ -779,7 +877,7 @@ async function handleSched13History(env) {
     for (const q of batch) {
       try {
         const u = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent('"' + q + '"')}&forms=${encodeURIComponent('SCHEDULE 13D')}`;
-        const res = await fetch(u, { headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/json' } });
+        const res = await secFetch(u, { headers: { 'Accept': 'application/json' } }, env);
         if (!res.ok) continue; // skip this activist this round; a later full re-run can be forced by deleting the state key
         const data = await res.json();
         for (const hit of (data.hits?.hits || [])) {
@@ -864,7 +962,7 @@ async function readSched13(env, rec) {
   }
   const dashed = `${m[2].slice(0, 10)}-${m[2].slice(10, 12)}-${m[2].slice(12)}`;
   const url = `https://www.sec.gov/Archives/edgar/data/${parseInt(m[1], 10)}/${m[2]}/${dashed}.txt`;
-  const res = await fetch(url, { headers: { 'User-Agent': SEC_USER_AGENT } });
+  const res = await secFetch(url, {}, env);
   if (!res.ok) throw new Error('EDGAR ' + res.status + ' reading ' + rec.acc);
   const text = await res.text();
   const cls = classify13D(text);
@@ -879,7 +977,7 @@ async function runAlertScan(env) {
   const status = { ran: new Date().toISOString(), scanned: 0, alerted: 0, suppressedFinancing: 0, errors: [] };
   try {
     const feedUrl = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=SCHEDULE+13D&company=&dateb=&owner=include&count=100&output=atom';
-    const res = await fetch(feedUrl, { headers: { 'User-Agent': SEC_USER_AGENT, 'Accept': 'application/atom+xml' } });
+    const res = await secFetch(feedUrl, { headers: { 'Accept': 'application/atom+xml' } }, env);
     if (!res.ok) throw new Error('SEC feed HTTP ' + res.status);
     const text = await res.text();
 
