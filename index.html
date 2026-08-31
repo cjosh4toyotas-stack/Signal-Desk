@@ -1802,11 +1802,16 @@ async function loadInstitutions() {
           .sort((a, b) => b.pctBook - a.pctBook)             // rank by conviction, not raw dollars
           .slice(0, 3)
           .forEach(c => {
+            // A 13F describes holdings as of the quarter-end BEFORE it was
+            // filed (up to 45 days earlier) — say so with a date, not a
+            // disclaimer, and rank it by conviction (% of the fund's book),
+            // not by raw dollars, which only measured how big the fund is.
+            const asOf = quarterEndBefore(filingDate);
             const sig = {
               source: 'institution', tag: c.dir === 'buy' ? 'FUND NEW STAKE' : 'FUND EXIT', entity: fund.name,
-              detail: `${c.detail} · 13F filed ${filingDate} (quarter-end snapshot, up to 45-day lag)`,
-              direction: c.dir, time: filingDate, link: detailUrl,
-              valueUsd: c.value, sortValue: c.value * (1 + c.pctBook / 10), ticker: null
+              detail: `${c.detail} · holdings as of ${asOf} (13F filed ${filingDate})`,
+              direction: c.dir, time: filingDate, asOf, link: detailUrl, pctBook: c.pctBook,
+              valueUsd: c.value, sortValue: institutionSortValue(c.pctBook), ticker: null
             };
             allSignals.push(sig);
             // Ticker resolution is async + optional — the signal renders
@@ -2736,6 +2741,40 @@ function toggleSigFilings(id, btn) {
 // tops everything for weeks. Anything older than MAX_AGE days drops off.
 const SIGNAL_HALF_LIFE_DAYS = 7;
 const SIGNAL_MAX_AGE_DAYS = 90;
+// 13F rows are quarter-end snapshots that were already ~45 days stale the
+// day they were filed, so they fade on a much shorter clock than a Form 4
+// (which reports a trade within two business days) and drop off entirely
+// after three weeks — a 17-day-old 13F should never sit on top of a fresh
+// insider buy. They stay on the Hedge Funds cards regardless.
+const SIGNAL_13F_HALF_LIFE_DAYS = 4;
+const SIGNAL_13F_MAX_AGE_DAYS = 21;
+
+// Conviction-based rank value for a 13F event: 1% of the fund's book counts
+// like a $1M materiality-neutral insider trade; capped so a single 15%+
+// bet can't dominate every other stream.
+function institutionSortValue(pctBook) {
+  return 1e6 * Math.min(Math.max(Number(pctBook) || 0.75, 0.75), 15);
+}
+
+// Rows remembered from earlier visits predate the pctBook field — recover
+// it from the row's own text so they re-rank on the same scale.
+function pctBookOf(s) {
+  if (s.pctBook != null) return s.pctBook;
+  const m = String(s.detail || '').match(/([\d.]+)% of the (?:fund's )?book/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// The quarter-end a 13F filed on `dateStr` reports on (the last Mar 31 /
+// Jun 30 / Sep 30 / Dec 31 strictly before the filing date).
+function quarterEndBefore(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d)) return 'quarter-end';
+  const y = d.getUTCFullYear(), m = d.getUTCMonth(); // 0-11
+  const q = Math.floor(m / 3); // quarter containing the filing date
+  const endMonth = q * 3; // month index AFTER the previous quarter (0,3,6,9)
+  const end = new Date(Date.UTC(endMonth === 0 ? y - 1 : y, endMonth === 0 ? 12 : endMonth, 0)); // day 0 = last day of prev month
+  return `${end.getUTCMonth() + 1}/${end.getUTCDate()}/${end.getUTCFullYear()}`;
+}
 
 function signalAgeDays(s) {
   if (!s.time) return SIGNAL_MAX_AGE_DAYS; // undated → treat as stale
@@ -3038,13 +3077,18 @@ function renderSignals() {
     s => `${s.source}|${s.tag}|${s.entity}|${s.detail}`
   )
     .map(s => ({ ...s, ageDays: signalAgeDays(s) }))
-    .filter(s => s.ageDays <= SIGNAL_MAX_AGE_DAYS)
+    .filter(s => s.ageDays <= (s.source === 'institution' ? SIGNAL_13F_MAX_AGE_DAYS : SIGNAL_MAX_AGE_DAYS))
     // sortValue carries the quality weights (insider role, cluster premium,
     // first-buy bonus, stake-change size); valueUsd stays the honest
     // displayed dollar figure. materialityMult() rescales by the trade's
     // share of the company's market cap — the metric that actually ranks
     // conviction, instead of raw dollars that just rank company size.
-    .map(s => ({ ...s, score: (s.sortValue || s.valueUsd) * materialityMult(s) * Math.pow(0.5, s.ageDays / SIGNAL_HALF_LIFE_DAYS) * valuationBoost(s) * contractBoost(s) }))
+    .map(s => {
+      const inst = s.source === 'institution';
+      const base = inst ? institutionSortValue(pctBookOf(s)) : (s.sortValue || s.valueUsd);
+      const halfLife = inst ? SIGNAL_13F_HALF_LIFE_DAYS : SIGNAL_HALF_LIFE_DAYS;
+      return { ...s, score: base * materialityMult(s) * Math.pow(0.5, s.ageDays / halfLife) * valuationBoost(s) * contractBoost(s) };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, 25);
   renderCommandCenter();
@@ -3056,7 +3100,7 @@ function renderSignals() {
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Conviction events, ranked by <strong>materiality</strong> — each trade's size <em>relative to the company's market cap</em> (2 bp of the equity is neutral; 0.3% of a company scores 4× a rounding-error trade at a megacap) and, for insiders, relative to their own prior holdings (doubling a stake earns a bonus) — then <em>weighted by freshness</em>: recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Raw dollars are shown but no longer rank: a $5M buy at a $3T company is not a signal, a $300K CEO buy in a $60M company is. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names. Buy-side rows also get a <strong>CONTRACT 8-Ks</strong> badge when EDGAR full-text search finds recent filings matching contract/award language — a keyword lead worth reading, not a verified win — with a small extra rank boost, because committed capital plus a growing order book is the strongest overlap the public record offers.
+      Conviction events, ranked by <strong>materiality</strong> — each trade's size <em>relative to the company's market cap</em> (2 bp of the equity is neutral; 0.3% of a company scores 4× a rounding-error trade at a megacap) and, for insiders, relative to their own prior holdings (doubling a stake earns a bonus) — then <em>weighted by freshness</em>: recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Raw dollars are shown but no longer rank: a $5M buy at a $3T company is not a signal, a $300K CEO buy in a $60M company is. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. A 13F is a quarter-end snapshot that was already up to 45 days old when filed, so each row states the <strong>as-of date</strong>, ranks by % of the fund's book rather than raw dollars, fades on a ${SIGNAL_13F_HALF_LIFE_DAYS}-day half-life and leaves this board after ${SIGNAL_13F_MAX_AGE_DAYS} days. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names. Buy-side rows also get a <strong>CONTRACT 8-Ks</strong> badge when EDGAR full-text search finds recent filings matching contract/award language — a keyword lead worth reading, not a verified win — with a small extra rank boost, because committed capital plus a growing order book is the strongest overlap the public record offers.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">
