@@ -67,5 +67,21 @@ t('13F rows use a short half-life and 21-day cutoff', /SIGNAL_13F_HALF_LIFE_DAYS
 t('13F detail states the as-of date', /holdings as of \$\{asOf\}/.test(html));
 t('market cap fetched for sells too (not just buys)', /ranked\.filter\(x => x\.ticker\)\.map\(x => x\.ticker\)/.test(html));
 
+// ── Trend multiplier (2026-09-02): price action IN the confluence score ──
+const trendSrc = slice(html, 'function trendMult', '// end trendMult');
+const trendMult = new Function(trendSrc + '; return trendMult;')();
+t('ripping stock (STDN pattern: 1m +30, since-signal +12) scores way up', trendMult({ pct1m: 30, pct3m: 60 }, 12).mult >= 1.4);
+t('ripping stock gets the ▲ confirming badge class', trendMult({ pct1m: 30, pct3m: 60 }, 12).cls === 'confirming');
+t('falling knife (1m -20, since-signal -15) is crushed', trendMult({ pct1m: -20, pct3m: -35 }, -15).mult <= 0.5);
+t('falling knife gets the ▼ falling badge class', trendMult({ pct1m: -20 }, -15).cls === 'falling');
+t('flat tape is neutral 1×', trendMult({ pct1m: 0, pct3m: 2 }, 0).mult === 1);
+t('no price data is neutral 1× with no badge', trendMult(null, null).mult === 1 && trendMult(null, null).cls === null);
+t('multiplier clamps to [0.3, 2]', trendMult({ pct1m: 400 }, 400).mult <= 2 && trendMult({ pct1m: -90 }, -90).mult >= 0.3);
+t('mild dip (1m -10) demotes but does not kill', (m => m < 1 && m >= 0.5)(trendMult({ pct1m: -10 }, null).mult));
+t('note carries 1m/3m/since-signal figures', /1m \+30%, 3m \+60%, since newest signal \+12%/.test(trendMult({ pct1m: 30, pct3m: 60 }, 12).note));
+t('confluence score applies the trend multiplier', /e\.pts \* \(1 \+ 0\.45 \* \(e\.sources\.size - 1\)\) \* tm\.mult/.test(html));
+t('deal-stream cards are exempt from the trend multiplier', /!e\.sources\.has\('deal'\) \? ccTrend\[e\.ticker\] : null/.test(html));
+t('price context caches to localStorage with a TTL', /sd_pricectx_v1/.test(html) && /PRICECTX_TTL = 6 \* 3600 \* 1000/.test(html));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
