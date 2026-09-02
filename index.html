@@ -202,6 +202,8 @@ main { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto; paddin
 .cc-badge.b-deal { border-color: rgba(96,165,250,0.5); color: #60a5fa; background: rgba(96,165,250,0.12); }
 .cc-badge.b-rumor { border-color: rgba(167,139,250,0.5); color: var(--violet); background: var(--violet-dim); }
 .cc-badge.b-new { border-color: var(--amber-glow); color: var(--amber); background: var(--amber-dim); animation: pulse-dot 1.6s infinite; }
+.cc-badge.b-conf { border-color: rgba(57,255,143,0.55); color: var(--teal); background: rgba(57,255,143,0.14); }
+.cc-badge.b-fall { border-color: rgba(255,92,114,0.55); color: var(--rose); background: var(--rose-dim); }
 .cc-age { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: var(--text-muted); white-space: nowrap; }
 .cc-cleared {
   margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
@@ -1442,9 +1444,14 @@ function saveInsiderHist() {
 // a buy at all-time highs (momentum chasing). Fetched lazily for cluster
 // symbols and the biggest single buys, then stitched into the signal text.
 const priceCtxCache = {};
+const PRICECTX_LS_KEY = 'sd_pricectx_v1';
+const PRICECTX_TTL = 6 * 3600 * 1000;
 async function fetchPriceContext(symbol) {
   if (!ALPACA_PROXY_URL || !symbol) return null;
   if (symbol in priceCtxCache) return priceCtxCache[symbol];
+  const ls = sdMemGet(PRICECTX_LS_KEY, {}) || {};
+  const hit = ls[symbol];
+  if (hit && Date.now() - hit.at < PRICECTX_TTL) return (priceCtxCache[symbol] = hit.ctx);
   try {
     const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 365);
     const res = await fetch(`${ALPACA_PROXY_URL}/bars?symbol=${encodeURIComponent(symbol)}&start=${ymd(start)}&end=${ymd(end)}`);
@@ -1456,7 +1463,17 @@ async function fetchPriceContext(symbol) {
     const lo = Math.min(...data.bars.map(b => b.l));
     const offHigh = ((hi - last) / hi) * 100;
     const offLow = ((last - lo) / lo) * 100;
-    return (priceCtxCache[symbol] = { last, offHigh, offLow });
+    // Trend inputs for the confluence trend multiplier: ~1 month and ~3
+    // months of trading days back from the latest close.
+    const ago = n => closes.length > n ? closes[closes.length - 1 - n] : closes[0];
+    const pct1m = ago(21) ? ((last - ago(21)) / ago(21)) * 100 : null;
+    const pct3m = ago(63) ? ((last - ago(63)) / ago(63)) * 100 : null;
+    const ctx = { last, offHigh, offLow, pct1m, pct3m };
+    ls[symbol] = { at: Date.now(), ctx };
+    const keys = Object.keys(ls);
+    if (keys.length > 150) keys.sort((a, b) => ls[a].at - ls[b].at).slice(0, keys.length - 150).forEach(k => delete ls[k]);
+    sdMemSet(PRICECTX_LS_KEY, ls);
+    return (priceCtxCache[symbol] = ctx);
   } catch { return (priceCtxCache[symbol] = null); }
 }
 function priceCtxLabel(ctx) {
@@ -2056,6 +2073,49 @@ function renderCampaigns() {
 // one alone. Each stream contributes points per name; names with 2+
 // independent streams get a confluence multiplier and float to the top of
 // a board that never hides behind a tab.
+// ── Trend multiplier (2026-09-02): price context INSIDE the confluence score ──
+// The disclosure streams (insider buys, 13Ds, 13F adds) fire mostly on
+// stocks that just sold off — that's where insiders and activists buy, so
+// on its own the board reads like a falling-knife list. The multiplier
+// keeps the filing signals but scores them through what the tape has done
+// SINCE: a signal price is confirming (the STDN pattern — filing + rip)
+// earns up to 2×; a name still in free-fall keeps its card only at a
+// fraction of the score and gets badged ▼ STILL FALLING so it reads as
+// "watch", not "buy now". Deal-stream cards are exempt — a cash-deal
+// target trades pinned to the offer, where weakness means spread, not trend.
+function trendMult(ctx, sinceSigPct) {
+  const out = (mult, cls, note) => ({ mult, cls, note });
+  if (!ctx || ctx.pct1m == null) return out(1, null, null);
+  let m = ctx.pct1m >= 15 ? 1.5 : ctx.pct1m >= 5 ? 1.25 : ctx.pct1m > -5 ? 1 : ctx.pct1m > -15 ? 0.7 : 0.45;
+  if (sinceSigPct != null) m *= sinceSigPct >= 5 ? 1.2 : sinceSigPct <= -8 ? 0.75 : 1;
+  m = Math.min(2, Math.max(0.3, m));
+  const cls = m >= 1.2 ? 'confirming' : m <= 0.7 ? 'falling' : null;
+  const f = v => (v >= 0 ? '+' : '') + v.toFixed(0) + '%';
+  const note = `price: 1m ${f(ctx.pct1m)}${ctx.pct3m != null ? ', 3m ' + f(ctx.pct3m) : ''}${sinceSigPct != null ? ', since newest signal ' + f(sinceSigPct) : ''}`;
+  return out(m, cls, note);
+}
+// end trendMult
+
+// Per-ticker trend data for the board, filled in asynchronously after the
+// first paint (bars come from the alpaca proxy; both fetches cache for 6h).
+const ccTrend = {};
+let ccTrendPending = false;
+function ensureCcTrend(entries) {
+  const need = entries.filter(e => e.ticker && !e.sources.has('deal') && !(e.ticker in ccTrend));
+  if (!need.length || ccTrendPending) return;
+  ccTrendPending = true;
+  Promise.all(need.map(async e => {
+    try {
+      const [ctx, since] = await Promise.all([
+        fetchPriceContext(e.ticker),
+        e.latest ? fetchSinceDisclosure(e.ticker, e.latest) : null
+      ]);
+      ccTrend[e.ticker] = { ctx, sincePct: since && since.pct != null ? since.pct : null };
+    } catch { ccTrend[e.ticker] = { ctx: null, sincePct: null }; }
+  })).then(() => { ccTrendPending = false; renderCommandCenter(); })
+    .catch(() => { ccTrendPending = false; });
+}
+
 function computeConfluence() {
   const byKey = {};
   const add = (key, label, src, pts, detail, link, ticker, time) => {
@@ -2201,7 +2261,18 @@ function computeConfluence() {
 
   return Object.values(byKey)
     .filter(e => !e.latest || (Date.now() - new Date(e.latest).getTime()) / 864e5 <= MAX_AGE_DAYS)
-    .map(e => ({ ...e, score: e.pts * (1 + 0.45 * (e.sources.size - 1)) }))
+    .map(e => {
+      // Full trend multiplier: filing signals scored through price action.
+      const tr = e.ticker && !e.sources.has('deal') ? ccTrend[e.ticker] : null;
+      const tm = trendMult(tr && tr.ctx, tr ? tr.sincePct : null);
+      if (tm.cls === 'confirming' && !e.badges.some(b => b.text === '▲ PRICE CONFIRMING')) e.badges.push({ cls: 'b-conf', text: '▲ PRICE CONFIRMING' });
+      if (tm.cls === 'falling' && !e.badges.some(b => b.text === '▼ STILL FALLING')) e.badges.push({ cls: 'b-fall', text: '▼ STILL FALLING' });
+      if (tm.note && !e.details.some(d => d.startsWith('↳ price:'))) {
+        if (e.details.length >= 5) e.details.pop();
+        e.details.push('↳ ' + tm.note);
+      }
+      return { ...e, trendMult: tm.mult, score: e.pts * (1 + 0.45 * (e.sources.size - 1)) * tm.mult };
+    })
     .filter(e => e.score >= 1.4)
     .sort((a, b) => b.score - a.score)
     .slice(0, 9);
@@ -2228,6 +2299,7 @@ function renderCommandCenter() {
   const grid = document.getElementById('cc-grid');
   if (!grid) return;
   const entries = computeConfluence();
+  ensureCcTrend(entries);
   renderClearedStrip();
   if (!entries.length) {
     // Distinguish "still scanning" from "tape is quiet" — a board that
@@ -2241,7 +2313,7 @@ function renderCommandCenter() {
     <div class="cc-card ${e.sources.size >= 2 ? 'cc-hot' : ''}">
       <div class="cc-card-top">
         <div class="cc-ticker">${e.ticker ? tickerLink(e.ticker) : escHtml(e.label)}</div>
-        <div class="cc-score-wrap" title="Confluence score — per-stream points × a multiplier for each additional independent signal stream pointing at this name">
+        <div class="cc-score-wrap" title="Confluence score — per-stream points × a multiplier for each additional independent signal stream × the trend multiplier (0.3–2×: price confirming the signal scores up; names still falling score down; deal cards exempt)">
           <div class="cc-score-bar"><div class="cc-score-fill" style="width:${Math.round((e.score / maxScore) * 100)}%"></div></div>
           <span class="cc-score-num">${e.score.toFixed(1)}</span>
         </div>
