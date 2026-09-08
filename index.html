@@ -937,7 +937,18 @@ let allSignals = [];
 // the freshness decay in renderSignals is what ages it out (hard cap 90
 // days), not the accident of whether the feed still shows it.
 const SIG_MEM_KEY = 'sd_signal_history_v1';
-function sigId(s) { return [s.source, s.tag, s.entity, s.detail].join('|'); }
+// Identity must not depend on anything that drifts between a live signal
+// and its remembered copy: the FIRST-BUY tag and the "first purchase in the
+// local record" / stake-note suffixes are computed from local state, so a
+// remembered copy with the suffix and a live copy without it used to count
+// as two signals — double points and a duplicated line on the board card.
+// Key on the filing link when there is one; otherwise on the detail with
+// the volatile suffixes stripped.
+function sigId(s) {
+  if (s.link) return [s.source, s.entity, s.link].join('|');
+  const base = String(s.detail || '').replace(/ — first purchase by this insider in the local record/g, '').replace(/ · part of a cluster/g, '').replace(/ — (?:a new position from zero|grew their stake [^—·]+)/g, '');
+  return [s.source, s.entity, base].join('|');
+}
 let memorySignals = (sdMemGet(SIG_MEM_KEY, []) || []).filter(s =>
   s && s.time && (Date.now() - new Date(s.time).getTime()) / 86400e3 <= 90);
 
@@ -2158,7 +2169,7 @@ function computeConfluence() {
     add(key, s.ticker, s.source + (s.cluster ? ':cluster' : ''), pts, s.detail, s.link, s.ticker, s.time);
     const entry = byKey[key];
     if (badge && !entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
-    if (s.context && !entry.details.includes(s.context)) entry.details.push('↳ ' + s.context);
+    if (s.context && !entry.details.includes('↳ ' + s.context)) entry.details.push('↳ ' + s.context);
   }
 
   // Stream 3: 13D activity, live + Worker history. History records carry
@@ -2186,6 +2197,7 @@ function computeConfluence() {
       : (r.activist || r.kind === 'activist') ? { cls: 'b-13d', text: '★ ACTIVIST 13D' }
       : r.kind === 'accumulation' ? { cls: 'b-13d', text: '📈 OPEN-MKT 13D' }
       : r.kind === 'deal' ? { cls: 'b-13d', text: '🤝 DEAL-LINKED 13D' }
+      : r.kind === 'consideration' ? { cls: 'b-13d', text: '🧾 13D · DEAL CONSIDERATION' }
       : r.kind === 'affiliate' ? { cls: 'b-13d', text: '13D · AFFILIATE' }
       : { cls: 'b-13d', text: '13D' };
     if (!entry.badges.some(b => b.text === badge.text)) entry.badges.push(badge);
@@ -2556,7 +2568,7 @@ function renderSched13() {
     <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
       Live <strong>Schedule 13D / 13G</strong> filings — the disclosure required within days of any investor crossing 5% ownership of a public company.
       A <strong>NEW 13D</strong> is the classic activist opening move; <strong>13D AMEND</strong> means an existing holder changed their position or intentions; 13G is the same threshold with passive intent.
-      Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong> — most other raw 13D filings are founders and family holders, not campaigns. "★ Opportunities" shows only those. Stake % and the <strong>Read</strong> column are parsed from each filing's text as it loads: a 13D whose shares came from a securities purchase agreement, convertible or warrant package (usually with a 9.99% ownership blocker) is flagged <strong style="color:var(--rose)">FINANCING / DILUTION</strong> — that is the company selling paper to the filer, not the filer buying stock, and it is excluded from ★ Opportunities and the Confluence Board. Stated activist intent and open-market buying rank up; director/founder filers rank down. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
+      Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong> — most other raw 13D filings are founders and family holders, not campaigns. "★ Opportunities" shows only those. Stake % and the <strong>Read</strong> column are parsed from each filing's text as it loads: a 13D whose shares came from a securities purchase agreement, convertible or warrant package (usually with a 9.99% ownership blocker) is flagged <strong style="color:var(--rose)">FINANCING / DILUTION</strong> — that is the company selling paper to the filer, not the filer buying stock, and it is excluded from ★ Opportunities and the Confluence Board. A 13D whose shares were <strong>DEAL CONSIDERATION</strong> (payment for a business the filer sold to the issuer, often in tranches) is treated the same way. Item 4 intent is only counted in sentences that aren't denying it — the (a)–(j) boilerplate on a passive filing no longer reads as activist. Stated activist intent and open-market buying rank up; director/founder filers rank down. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
       <div class="empty-note" style="margin-top:8px">${sched13HistoryMeta
         ? (sched13HistoryMeta.done
           ? 'Depth: the live feed plus the Worker\'s stored scan history and a 12-month backfill of roster-activist 13Ds from EDGAR full-text search — ★ Opportunities goes back months, not hours.'
@@ -2602,13 +2614,27 @@ function renderSched13() {
 //   accumulation — Item 5(c) open-market purchases, no red flags.
 //   affiliate    — filer is a director/officer/founder/family holder.
 //   plain        — nothing distinctive in the text.
-const SCHED13_CLASS_KEY = 'sd_sched13_class_v2';
+const SCHED13_CLASS_KEY = 'sd_sched13_class_v3';
 const sched13Class = sdMemGet(SCHED13_CLASS_KEY, {});
-const SCHED13_KIND_MULT = { financing: 0, deal: 0.8, activist: 1.5, accumulation: 1.25, affiliate: 0.5, plain: 1, unknown: 1 };
+//   consideration — shares were payment for an asset/company the filer sold
+//                  to the issuer (stock purchase / asset purchase / merger
+//                  consideration, earn-out tranches). The filer never bought
+//                  anything; the issuer paid in paper. Context, not a signal.
+const SCHED13_KIND_MULT = { financing: 0, consideration: 0.2, deal: 0.8, activist: 1.5, accumulation: 1.25, affiliate: 0.5, plain: 1, unknown: 1 };
 const SCHED13_KIND_LABEL = {
-  financing: '⚠ FINANCING / DILUTION', deal: '🤝 DEAL-LINKED', activist: '★ ACTIVIST INTENT',
+  financing: '⚠ FINANCING / DILUTION', consideration: '🧾 DEAL CONSIDERATION', deal: '🤝 DEAL-LINKED', activist: '★ ACTIVIST INTENT',
   accumulation: '📈 OPEN-MARKET BUYING', affiliate: 'AFFILIATE / INSIDER', plain: 'PLAIN 13D', unknown: '…'
 };
+
+// Item 4 boilerplate on a PASSIVE 13D enumerates every activist action
+// (a)–(j) in order to deny each one — "no present plan or proposal that
+// relates to ... nominate ... board ... special meeting". Counting those
+// words raw makes every passive filing look like stated intent (Nexalin,
+// Sep 2026). Drop negated sentences before counting intent.
+const NEGATED_SENTENCE = /\b(?:no (?:present |current )?(?:plans?|proposals?|intention|right)|does not (?:have|intend|currently)|do not (?:have|intend)|has no (?:right|plan|intention)|have no (?:right|plan|intention)|not (?:currently )?(?:have|intend|entitled)|except as (?:set forth|described))\b/i;
+function stripNegated(t) {
+  return t.split(/(?<=[.;:])\s+|\n+/).filter(sen => !NEGATED_SENTENCE.test(sen)).join(' ');
+}
 
 function classify13D(text) {
   const t = String(text || '');
@@ -2626,25 +2652,47 @@ function classify13D(text) {
   if (/\bwarrants?\b/i.test(t) && financingHits >= 2) flags.push('warrants');
   if (/additional investment right/i.test(t)) flags.push('further-investment right');
   const dealHits = count(/voting agreement/gi) + count(/support agreement/gi) + count(/agreement and plan of merger/gi) + count(/merger agreement/gi) + count(/tender offer/gi);
-  const intentHits = count(/nominat(?:e|ion|ing|ed)/gi) + count(/proxy (?:contest|solicitation|fight|statement)/gi) +
-    count(/strategic (?:alternatives|review)/gi) + count(/sale of the (?:issuer|company)/gi) + count(/board (?:composition|representation|refresh|seats?)/gi) +
-    count(/letter to the (?:board|issuer|company)/gi) + count(/maximiz(?:e|ing) (?:shareholder|stockholder) value/gi) + count(/undervalued/gi) +
-    count(/unsolicited/gi) + count(/proposal to acquire/gi) + count(/going.private/gi) + count(/special meeting/gi);
+  // Consideration shares: the filer SOLD something and got paid in stock.
+  const considerationHits =
+    count(/no funds were used/gi) + count(/as (?:non-cash )?consideration for/gi) + count(/consideration shares/gi) +
+    count(/(?:stock|asset|share) purchase agreement/gi) + count(/in exchange for (?:all|the) (?:issued and )?outstanding/gi) +
+    count(/merger consideration/gi) + count(/earn-?out/gi) + count(/deferred purchase consideration/gi) + count(/tranches?/gi);
+  const soldToIssuer = /(?:issuer|company) (?:purchased|acquired) from (?:the reporting person|[A-Z]{2,5}|the filer)/i.test(t) ||
+    /(?:sale|transfer) of [\s\S]{0,80}? to the issuer/i.test(t) || /no funds were used/i.test(t);
+  if (soldToIssuer || considerationHits >= 3) flags.push('shares were consideration for an asset/company sold to the issuer');
+  // Intent is counted only in sentences that are NOT denying it.
+  const pos = stripNegated(t);
+  const pcount = re => (pos.match(re) || []).length;
+  const intentHits = pcount(/nominat(?:e|ion|ing|ed)/gi) + pcount(/proxy (?:contest|solicitation|fight|statement)/gi) +
+    pcount(/strategic (?:alternatives|review)/gi) + pcount(/sale of the (?:issuer|company)/gi) + pcount(/board (?:composition|representation|refresh|seats?)/gi) +
+    pcount(/letter to the (?:board|issuer|company)/gi) + pcount(/maximiz(?:e|ing) (?:shareholder|stockholder) value/gi) + pcount(/undervalued/gi) +
+    pcount(/unsolicited/gi) + pcount(/proposal to acquire/gi) + pcount(/going.private/gi) + pcount(/special meeting/gi) +
+    pcount(/intends? to (?:engage|seek|pursue|nominate|solicit)/gi);
   const openMarketHits = count(/open[- ]market/gi);
+  // Affiliate: a director/officer of the issuer is the filer OR owns a
+  // piece of the filer ("Dr. X, a member of the Issuer's board ... holds a
+  // minority ownership interest in GLV").
   const affiliate = /(?:director|officer|chairman|chief executive officer|founder|president) of the (?:issuer|company)/i.test(t) ||
-    /serves? as (?:a |the )?(?:director|chairman|chief executive)/i.test(t) || /employment agreement/i.test(t);
-  if (affiliate) flags.push('filer is a director/officer/founder of the issuer');
+    /serves? as (?:a |the )?(?:director|chairman|chief [a-z]+ officer|chief executive)/i.test(t) || /employment agreement/i.test(t) ||
+    /member of the (?:issuer|company)'s board/i.test(t) || /(?:issuer|company)'s (?:chief [a-z]+ officer|board of directors)/i.test(t) ||
+    /(?:ownership|membership|equity) interest in (?:the reporting person|the filer|[A-Z]{2,5}\b)/i.test(t);
+  if (affiliate) flags.push('filer is, or is part-owned by, a director/officer of the issuer');
+  // Distress tells in the filing text itself.
+  const reverseSplit = /reverse (?:stock )?split/i.test(t);
+  if (reverseSplit) flags.push('recent reverse split — cover-page share count may be pre-split');
+  if (/delist(?:ing|ed)?/i.test(t)) flags.push('delisting language');
   if (dealHits) flags.push('voting/merger agreement');
   if (intentHits >= 2) flags.push('stated activist intent');
   if (openMarketHits) flags.push('open-market purchases');
   const strongFinancing = /securities purchase agreement|subscription agreement|private placement/i.test(t) && /convertible|debenture|warrant|preferred/i.test(t);
   let kind = 'plain';
   if (strongFinancing || financingHits >= 4 || (blocker && financingHits >= 1)) kind = 'financing';
+  else if (soldToIssuer || considerationHits >= 3) kind = 'consideration';
   else if (dealHits >= 2) kind = 'deal';
   else if (intentHits >= 2) kind = 'activist';
   else if (openMarketHits >= 1 && !affiliate) kind = 'accumulation';
   else if (affiliate || blocker) kind = 'affiliate';
-  return { kind, flags, blocker, affiliate, openMarket: openMarketHits > 0, intent: intentHits >= 2 };
+  return { kind, flags, blocker, affiliate, reverseSplit, openMarket: openMarketHits > 0, intent: intentHits >= 2 };
 }
 
 // Parse the cover page: percent of class + aggregate shares owned. Together
@@ -2678,11 +2726,12 @@ function applySched13Analysis(r, a) {
   }
   r.kind = a.kind || 'unknown';
   r.flags = a.flags || [];
+  r.affiliate = !!a.affiliate;
   r.sharesOut = a.sharesOut || null;
   if (a.mcap > 0) r.mcap = a.mcap;
   // A financing 13D is context, not an opportunity — drop it out of the
   // ★ view and the alert tier regardless of how it was tiered on name alone.
-  if (r.kind === 'financing' && r.tier >= 2) { r.tierBefore = r.tier; r.tier = 1; }
+  if ((r.kind === 'financing' || r.kind === 'consideration') && r.tier >= 2) { r.tierBefore = r.tier; r.tier = 1; }
 }
 
 // Fetch + analyze one filing (cached per accession in localStorage so a
@@ -2700,7 +2749,10 @@ async function analyzeSched13(r) {
     const text = await res.text();
     const cover = parse13DCover(text);
     const cls = classify13D(text);
-    a = { pct: cover.pct, amt: cover.amt, sharesOut: cover.sharesOut, kind: cls.kind, flags: cls.flags, blocker: cls.blocker, at: Date.now() };
+    // A cover page filed around a reverse split usually carries the
+    // pre-split share count while prices are post-split → market cap
+    // inflated ~ratio× and the MICROCAP tell disappears. Don't compute it.
+    a = { pct: cover.pct, amt: cover.amt, sharesOut: cls.reverseSplit ? null : cover.sharesOut, kind: cls.kind, flags: cls.flags, blocker: cls.blocker, affiliate: cls.affiliate, reverseSplit: cls.reverseSplit, at: Date.now() };
   } catch (e) {
     a = { pct: null, kind: 'unknown', flags: [], at: Date.now(), failed: true };
   }
@@ -2730,13 +2782,23 @@ async function analyzeSched13(r) {
 function sched13Quality(r) {
   const kind = r.kind || 'unknown';
   let mult = SCHED13_KIND_MULT[kind] != null ? SCHED13_KIND_MULT[kind] : 1;
-  if (kind === 'activist' && r.flags && r.flags.includes('open-market purchases')) mult = 1.75;
+  const flags = r.flags || [];
+  if (kind === 'activist' && flags.includes('open-market purchases')) mult = 1.75;
   if (r.mcap > 0 && r.mcap < 50e6 && mult > 0) mult *= 0.7; // sub-$50M names: thin float, hard to trade
-  const note = kind === 'financing' ? 'financing, not accumulation'
+  // Distress + insider linkage are discounts, not disqualifiers: the row
+  // keeps its details in 13D Watch; it just stops competing for a card.
+  if (flags.some(f => f.startsWith('recent reverse split')) && mult > 0) mult *= 0.5;
+  if (r.affiliate && kind !== 'affiliate' && mult > 0) mult *= 0.7;
+  const extras = [];
+  if (r.affiliate && kind !== 'affiliate') extras.push('insider-linked filer');
+  if (flags.some(f => f.startsWith('recent reverse split'))) extras.push('reverse split');
+  const base = kind === 'financing' ? 'financing, not accumulation'
+    : kind === 'consideration' ? 'shares were payment for a sale to the issuer, not a purchase'
     : kind === 'activist' ? 'stated activist intent in Item 4'
     : kind === 'accumulation' ? 'open-market purchases in Item 5(c)'
     : kind === 'affiliate' ? 'insider-affiliated filer'
     : kind === 'deal' ? 'voting/merger agreement' : '';
+  const note = [base, ...extras].filter(Boolean).join(' · ');
   return { mult, note };
 }
 
