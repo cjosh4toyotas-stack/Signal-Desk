@@ -1278,7 +1278,8 @@ function parseForm4(xmlText) {
     price: parseFloat(form4Val(t, 'transactionPricePerShare').replace(/,/g, '')) || 0,
     ownedAfter: parseFloat(form4Val(t, 'sharesOwnedFollowingTransaction').replace(/,/g, '')) || null
   }));
-  return { symbol, issuerName, owners, txns };
+  const footnotes = Array.from(doc.getElementsByTagName('footnote')).map(f => f.textContent || '').join(' ');
+  return { symbol, issuerName, owners, txns, footnotes };
 }
 
 // Collapses a filing's P (and separately S) transaction lines into one
@@ -1286,6 +1287,25 @@ function parseForm4(xmlText) {
 // at slightly different prices.
 function summarizeForm4(parsed, filing) {
   const out = [];
+  // WASH / INTERNAL TRANSFER: one filing reporting an S and a P of the same
+  // size at the same price on the same day is one owner moving shares
+  // between pockets (individual → family trust, grantor trust → trust) —
+  // not a buy and not a sell. Moroun/PAMT does this every September:
+  // 3.268M shares @ $9.555 "sold" individually and "bought" by the Lindsay
+  // Moroun Trust in a privately negotiated transaction. Codes P/S are what
+  // the filer used, so this must be caught on the numbers, not the code.
+  const pT = parsed.txns.filter(t => t.code === 'P' && t.shares > 0);
+  const sT = parsed.txns.filter(t => t.code === 'S' && t.shares > 0);
+  if (pT.length && sT.length) {
+    const sum = a => a.reduce((n, t) => n + t.shares, 0);
+    const pS = sum(pT), sS = sum(sT);
+    const pV = pT.reduce((n, t) => n + t.shares * t.price, 0), sV = sT.reduce((n, t) => n + t.shares * t.price, 0);
+    const sameSize = Math.abs(pS - sS) <= 0.01 * Math.max(pS, sS);
+    const samePrice = pS > 0 && sS > 0 && Math.abs(pV / pS - sV / sS) <= 0.01 * Math.max(pV / pS, sV / sS);
+    const sameDay = pT.some(p => sT.some(q => q.date === p.date));
+    const privateXfer = /privately negotiated|transfer(?:red)? to (?:a |the )?(?:trust|family|spouse)|for estate planning|no consideration/i.test(parsed.footnotes || '');
+    if ((sameSize && samePrice && sameDay) || (sameSize && privateXfer)) return out;
+  }
   for (const code of ['P', 'S']) {
     const txns = parsed.txns.filter(t => t.code === code && t.shares > 0);
     if (!txns.length) continue;
