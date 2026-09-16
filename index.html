@@ -468,7 +468,7 @@ footer a { color: var(--amber); }
   <div class="command-center" id="command-center">
     <div class="cc-header">
       <div class="cc-title"><span class="cc-dot"></span>Confluence Board</div>
-      <div class="cc-sub">signals + live M&amp;A deals stacked by recency — <span id="cc-updated">loading…</span></div>
+      <div class="cc-sub">signals + live M&amp;A deals stacked by recency — <span id="cc-updated">loading…</span> · <span id="cc-gate-note" title="Universe gate: NYSE/Nasdaq listing, $2+ price, $250M+ market cap, $1M+/day traded. Anything else never scores — see the Filtered tab.">gate: NYSE/Nasdaq · $2+ · $250M+ · $1M/day+</span></div>
     </div>
     <div class="cc-grid" id="cc-grid">
       <div class="cc-empty">Scanning all disclosure streams… names appear here the moment two independent signals point at the same company (or one stream fires its strongest pattern — a new activist 13D, an insider cluster buy, a 13G→13D escalation, a live merger near its close).</div>
@@ -489,6 +489,7 @@ footer a { color: var(--amber); }
     <button class="tab-btn" data-tab="charts" onclick="switchTab('charts')">Price Charts</button>
     <button class="tab-btn" data-tab="screener" onclick="switchTab('screener')">Screener</button>
     <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">Watchlist</button>
+    <button class="tab-btn" data-tab="filtered" onclick="switchTab('filtered')" title="Everything the universe gate and the 13D reading kept OFF the board, with the reason — audit it here">Filtered</button>
   </div>
 
   <!-- TOP SIGNALS -->
@@ -609,6 +610,11 @@ footer a { color: var(--amber); }
       <div class="status-box">Open this tab to load today's movers.</div>
     </div>
     <div class="chart-note">"★ Activist Targets" scores names already on your radar (watchlist + tickers surfaced by signals) against the academic activist-target profile — underperformance vs SPY, distance off highs, cheap valuation, margin gap, mid-cap size. The movers/actives views are market-wide price noise by comparison — a starting point to dig into, not a signal by itself.</div>
+  </div>
+
+  <!-- FILTERED — what the gate kept off the board, and why -->
+  <div class="tab-panel" id="tab-filtered">
+    <div id="filtered-body"><div class="status-box">Nothing filtered yet — open this tab after the board has loaded.</div></div>
   </div>
 
   <!-- WATCHLIST -->
@@ -980,6 +986,7 @@ function switchTab(name) {
   if (name === 'screener') loadScreener();
   if (name === 'campaigns') renderCampaigns();
   if (name === 'history') renderHistory();
+  if (name === 'filtered') renderFiltered();
 }
 
 function setFreshness(id, label, status, detail) {
@@ -2147,6 +2154,162 @@ function ensureCcTrend(entries) {
     .catch(() => { ccTrendPending = false; });
 }
 
+// ══════════════════════════════════════════════════════════════
+// UNIVERSE GATE (client) — one hard gate for every stream
+// ══════════════════════════════════════════════════════════════
+// The Worker's /universe route answers, per ticker: NYSE/Nasdaq listing
+// (from SEC's own file), last close, market cap (SEC XBRL shares × close)
+// and 20-day average dollar volume, plus a pass/fail verdict with reasons.
+// The dashboard asks once per ticker (6-hour local cache), and NOTHING
+// scores until the answer is back — unknown is not a pass. Names that fail
+// are collected in ccRejects and shown on the Filtered tab with the
+// reason, so the gate can be audited instead of trusted.
+const UNIVERSE_LS_KEY = 'sd_universe_v1';
+const UNIVERSE_TTL = 6 * 3600 * 1000;
+const universeCache = sdMemGet(UNIVERSE_LS_KEY, {}) || {};   // ticker -> { v, at }
+const universeNames = {};                                    // normName(subject) -> ticker | null
+const universePending = new Set();
+let universeOffline = false;
+let universeRules = null;
+let ccRejects = {};
+
+function universeSave() {
+  const keys = Object.keys(universeCache);
+  if (keys.length > 400) keys.sort((a, b) => universeCache[a].at - universeCache[b].at).slice(0, keys.length - 400).forEach(k => delete universeCache[k]);
+  sdMemSet(UNIVERSE_LS_KEY, universeCache);
+}
+
+// { known, pass, reasons, v }. Offline gate (old Worker) passes everything
+// and says so on the board rather than silently going dark.
+function gateFor(ticker) {
+  const t = String(ticker || '').toUpperCase();
+  if (!isRealTicker(t)) return { known: true, pass: false, reasons: ['no listed ticker'], v: null };
+  const hit = universeCache[t];
+  if (hit && Date.now() - hit.at < UNIVERSE_TTL) return { known: true, pass: !!hit.v.pass, reasons: hit.v.reasons || [], v: hit.v };
+  if (universeOffline) return { known: true, pass: true, reasons: ['universe gate offline — unverified'], v: null };
+  return { known: false, pass: false, reasons: ['verifying…'], v: null };
+}
+function universeLabel(v) {
+  if (!v) return '';
+  const px = v.price != null ? '$' + (v.price < 1 ? v.price.toFixed(4) : v.price.toFixed(2)) : '—';
+  const adv = v.adv20Usd != null ? (v.adv20Usd >= 1e6 ? '$' + (v.adv20Usd / 1e6).toFixed(1) + 'M/day' : '$' + (v.adv20Usd / 1e3).toFixed(0) + 'K/day') : '—';
+  return `${v.exchange || 'unlisted'} · ${px} · ${v.mcap > 0 ? fmtCap(v.mcap) + ' cap' : 'cap unknown'} · ${adv}`;
+}
+// Worker history rows carry the verdict the cron already computed.
+function universeSeed(gate, subject) {
+  if (!gate) return;
+  if (subject) universeNames[normName(subject)] = gate.ticker || null;
+  if (!gate.ticker || !isRealTicker(gate.ticker)) return;
+  const t = gate.ticker.toUpperCase();
+  const hit = universeCache[t];
+  if (hit && Date.now() - hit.at < UNIVERSE_TTL) return;
+  universeCache[t] = { at: Date.now(), v: { ticker: t, pass: !!gate.pass, reasons: gate.reasons || [], price: gate.price ?? null, mcap: gate.mcap ?? null, exchange: gate.exchange || null, adv20Usd: gate.adv20Usd ?? null } };
+}
+// undefined = not looked up yet; null = looked up, no NYSE/Nasdaq ticker.
+function universeTickerForName(name) {
+  const k = normName(name);
+  return k in universeNames ? universeNames[k] : undefined;
+}
+function sched13Gate(r) {
+  if (!isRealTicker(r.ticker)) return { known: !!r.tickerLookedUp, pass: false, reasons: ['no NYSE/Nasdaq ticker matches the subject'], v: null };
+  return gateFor(r.ticker);
+}
+function sched13Eligible(r) {
+  return sched13Gate(r).pass && !SCHED13_DEAD_KINDS.has(r.kind);
+}
+
+// Ask the Worker about everything the board might score, in batches.
+let universeFetching = false;
+async function ensureUniverseForBoard() {
+  if (!ALPACA_PROXY_URL || universeOffline || universeFetching) return;
+  const tickers = new Set();
+  const names = new Set();
+  const need = t => { const u = String(t || '').toUpperCase(); if (isRealTicker(u) && !gateFor(u).known && !universePending.has(u)) tickers.add(u); };
+  for (const s of combinedSignals()) if (s.direction !== 'sell' && s.valueUsd > 0) need(s.ticker);
+  for (const r of sched13Filings) {
+    if (r.tier < 2 && !(r.tierBefore >= 2)) continue;
+    if (isRealTicker(r.ticker)) need(r.ticker);
+    else if (!r.tickerLookedUp && r.subject && !(normName(r.subject) in universeNames) && !universePending.has('N:' + normName(r.subject))) names.add(r.subject);
+  }
+  for (const c of Object.values(campaignStore || {})) {
+    if (campaignStage(c) !== 'proxy-fight') continue;
+    if (!(normName(c.company) in universeNames) && !universePending.has('N:' + normName(c.company))) names.add(c.company);
+  }
+  for (const d of ((typeof boardData !== 'undefined' && boardData.deals) || [])) if (isRealTicker(d.ticker)) need(d.ticker);
+  if (!tickers.size && !names.size) return;
+  const tList = [...tickers].slice(0, 25), nList = [...names].slice(0, 30);
+  tList.forEach(t => universePending.add(t)); nList.forEach(n => universePending.add('N:' + normName(n)));
+  universeFetching = true;
+  try {
+    const qs = [];
+    if (tList.length) qs.push('tickers=' + encodeURIComponent(tList.join(',')));
+    if (nList.length) qs.push('names=' + encodeURIComponent(nList.join('|')));
+    const res = await fetch(`${ALPACA_PROXY_URL}/universe?${qs.join('&')}`);
+    if (res.status === 404) { universeOffline = true; return; }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    universeRules = data.rules || universeRules;
+    for (const [t, v] of Object.entries(data.tickers || {})) universeCache[t.toUpperCase()] = { at: Date.now(), v };
+    for (const [n, t] of Object.entries(data.byName || {})) universeNames[normName(n)] = t || null;
+    // Resolve the ticker-less 13D rows we asked about.
+    for (const r of sched13Filings) {
+      if (isRealTicker(r.ticker) || !r.subject) continue;
+      const k = normName(r.subject);
+      if (k in universeNames) { r.tickerLookedUp = true; if (universeNames[k]) r.ticker = universeNames[k]; }
+    }
+    // Anything asked for that didn't come back is a known miss, not a retry loop.
+    for (const t of tList) if (!universeCache[t]) universeCache[t] = { at: Date.now(), v: { ticker: t, pass: false, reasons: ['no data from universe lookup'] } };
+    universeSave();
+    const note = document.getElementById('cc-gate-note');
+    if (note && universeRules) note.textContent = `gate: ${universeRules.exchanges} · $${universeRules.minPrice}+ · $${universeRules.minMcap / 1e6}M+ · $${universeRules.minAdvUsd / 1e6}M/day+`;
+  } catch (e) {
+    // Leave these pending for this page-load so the board doesn't spin on a
+    // flaky route; a reload retries.
+    console.warn('universe gate lookup failed', e);
+    return;
+  } finally {
+    universeFetching = false;
+    tList.forEach(t => universePending.delete(t)); nList.forEach(n => universePending.delete('N:' + normName(n)));
+  }
+  // Re-rank with the verdicts in hand (renderSignals → renderCommandCenter
+  // → ensureUniverseForBoard, which finds nothing missing and stops).
+  if (typeof renderSignals === 'function') renderSignals(); else renderCommandCenter();
+  if (typeof renderSched13 === 'function' && sched13Filings.length) renderSched13();
+  if (document.getElementById('tab-filtered')?.classList.contains('active')) renderFiltered();
+}
+
+// ── FILTERED TAB ─────────────────────────────────────────────
+function renderFiltered() {
+  const body = document.getElementById('filtered-body');
+  if (!body) return;
+  const rows = Object.values(ccRejects)
+    .map(e => ({ ...e, sources: [...e.sources], reasons: [...e.reasons] }))
+    .sort((a, b) => new Date(b.latest || 0) - new Date(a.latest || 0))
+    .slice(0, 150);
+  const rules = universeRules ? `${universeRules.exchanges} · $${universeRules.minPrice}+ · $${universeRules.minMcap / 1e6}M+ market cap · $${universeRules.minAdvUsd / 1e6}M+/day traded` : 'NYSE/Nasdaq · $2+ · $250M+ market cap · $1M+/day traded';
+  const srcLabel = s => ({ insider: 'insider', 'insider:cluster': 'insider cluster', institution: '13F', sched13: '13D', campaign: 'proxy fight', deal: 'deal' })[s] || s;
+  body.innerHTML = `
+    <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
+      Everything the board refused, with the reason. The <strong>universe gate</strong> is a hard floor — <strong>${escHtml(rules)}</strong> — applied to every stream before anything scores; a 13D additionally has to read as a real accumulation (not a financing, a dividend paid in stock, deal consideration, or a founder's own holdings). ${universeOffline ? '<strong style="color:var(--rose)">The gate is offline (Worker /universe route not deployed) — the board is currently showing unverified names.</strong>' : ''} If a name you'd want is listed here, the reason tells you which rule to loosen.
+    </div>
+    ${rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Stream</th><th>Why it's out</th><th>What it was</th><th>Newest</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(e => `
+          <tr>
+            <td style="font-weight:600">${e.ticker ? tickerLink(e.ticker) : escHtml(e.label || '—')}${e.ticker && universeCache[e.ticker] && universeCache[e.ticker].v ? `<div style="font-size:10px;color:var(--text-muted)">${escHtml(universeLabel(universeCache[e.ticker].v))}</div>` : ''}</td>
+            <td style="white-space:nowrap;color:var(--text-dim)">${e.sources.map(srcLabel).map(escHtml).join(', ')}</td>
+            <td style="color:var(--rose)">${e.reasons.map(escHtml).join('<br>')}</td>
+            <td style="color:var(--text-dim);font-size:11px">${e.details.map(escHtml).join('<br>')}</td>
+            <td class="mono" style="white-space:nowrap;color:var(--text-muted)">${e.latest ? relTime(e.latest) : '—'}</td>
+            <td style="white-space:nowrap">${e.links.slice(0, 2).map((l, i) => `<a class="fund-link" href="${escHtml(l)}" target="_blank" rel="noopener">filing ${i + 1} →</a>`).join(' ')}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="status-box">Nothing has been filtered yet this session — either every candidate passed, or the streams haven\'t loaded. Come back after the board fills in.</div>'}
+  `;
+}
+
 function computeConfluence() {
   const byKey = {};
   const add = (key, label, src, pts, detail, link, ticker, time) => {
@@ -2174,10 +2337,23 @@ function computeConfluence() {
   // Stream 1+2: everything on the Top Signals board — live AND remembered
   // (insider buys/clusters, fund stake changes). Dollar value → log
   // points, so a $10M add doesn't drown a $600K CFO cluster.
+  ccRejects = {};
+  const reject = (label, ticker, source, reasons, detail, link, time) => {
+    const k = ticker || 'N:' + normName(label);
+    const e = ccRejects[k] = ccRejects[k] || { label, ticker: ticker || null, sources: new Set(), reasons: new Set(), details: [], links: [], latest: null };
+    e.sources.add(source);
+    (reasons || []).forEach(x => e.reasons.add(x));
+    if (detail && e.details.length < 3 && !e.details.includes(detail)) e.details.push(detail);
+    if (link && e.links.length < 3 && !e.links.includes(link)) e.links.push(link);
+    if (time && (!e.latest || new Date(time) > new Date(e.latest))) e.latest = time;
+  };
   for (const s of combinedSignals()) {
     if (!(s.valueUsd > 0) || s.direction === 'sell') continue;
     const key = isRealTicker(s.ticker) ? 'T:' + s.ticker : null;
     if (!key) continue;
+    // UNIVERSE GATE — one gate for every stream. Unknown is not a pass.
+    const g = gateFor(s.ticker);
+    if (!g.pass) { if (g.known) reject(s.ticker, s.ticker, s.source, g.reasons, s.detail, s.link, s.time); continue; }
     // Materiality here too (clamped tighter than Top Signals): a trade that
     // is a real share of the company earns more confluence than the same
     // dollars at a megacap.
@@ -2197,6 +2373,16 @@ function computeConfluence() {
   // directly by ticker and stack cleanly with insider/fund signals;
   // ticker-less feed records key by company name and merge below.
   for (const r of sched13Filings) {
+    if (r.tier < 2 && !(r.tierBefore >= 2)) continue;
+    const lbl = isRealTicker(r.ticker) ? r.ticker : r.subject;
+    const s13detail = `${r.form === 'SCHEDULE 13D' ? 'New 13D' : '13D amendment'} by ${r.filers.slice(0, 2).join(', ')}`;
+    // UNIVERSE GATE — a 13D with no NYSE/Nasdaq ticker behind it is not a
+    // company you can trade; one that fails price / cap / liquidity is
+    // recorded on the Filtered tab and never scores.
+    if (!isRealTicker(r.ticker)) { if (r.tickerLookedUp) reject(lbl, null, 'sched13', ['no NYSE/Nasdaq ticker matches the subject'], s13detail, r.link, r.filed); continue; }
+    const g13 = gateFor(r.ticker);
+    if (!g13.pass) { if (g13.known) reject(lbl, r.ticker, 'sched13', g13.reasons, s13detail, r.link, r.filed); continue; }
+    if (SCHED13_DEAD_KINDS.has(r.kind)) { reject(lbl, r.ticker, 'sched13', [SCHED13_KIND_LABEL[r.kind] + ' — ' + (r.flags || []).slice(0, 3).join(' · ')], s13detail, r.link, r.filed); continue; }
     if (r.tier < 2) continue;
     // WHAT KIND of 13D: the filing text is read (sched13Quality) before a
     // card is earned. A 13D whose shares came from a securities purchase
@@ -2230,9 +2416,13 @@ function computeConfluence() {
   // Stream 4: campaigns in proxy-fight stage — the late-cycle confirmation.
   for (const c of Object.values(campaignStore)) {
     if (campaignStage(c) !== 'proxy-fight' || !c.events.length) continue;
-    const key = 'N:' + normName(c.company);
+    const ct = universeTickerForName(c.company); // undefined = not looked up yet, null = no listed ticker
+    if (!ct) { if (ct === null) reject(c.company, null, 'campaign', ['no NYSE/Nasdaq ticker matches the subject'], 'Proxy fight', null, c.events[0].date); continue; }
+    const gc = gateFor(ct);
+    if (!gc.pass) { if (gc.known) reject(c.company, ct, 'campaign', gc.reasons, 'Proxy fight', null, c.events[0].date); continue; }
+    const key = 'T:' + ct;
     add(key, c.company, 'campaign', 2.5 * fresh(c.events[0].date, 14),
-      'Contested proxy fight underway — see Campaigns tab for the timeline', null, null, c.events[0].date);
+      'Contested proxy fight underway — see Campaigns tab for the timeline', null, ct, c.events[0].date);
     const entry = byKey[key];
     if (!entry.badges.some(b => b.text === '⚔ PROXY FIGHT')) entry.badges.push({ cls: 'b-proxy', text: '⚔ PROXY FIGHT' });
   }
@@ -2248,6 +2438,8 @@ function computeConfluence() {
     // Public-targets rule, client side: a deals row without a real ticker
     // (private target that slipped past the DB sweep) never earns a card.
     if (!isRealTicker(d.ticker)) continue;
+    const gd = gateFor(d.ticker);
+    if (!gd.pass) { if (gd.known) reject(d.ticker, d.ticker, 'deal', gd.reasons, `${d.acquirer} deal`, d.source_url, d.updated_at || d.ann_date); continue; }
     const key = 'T:' + d.ticker;
     const isRumor = d.status === 'rumored';
     const stagePts = d.status === 'pending_other' ? 4.2   // on the closing track — nearest catalyst
@@ -2330,13 +2522,14 @@ function ccFirstSeen(entries) {
 function renderCommandCenter() {
   const grid = document.getElementById('cc-grid');
   if (!grid) return;
+  ensureUniverseForBoard();
   const entries = computeConfluence();
   ensureCcTrend(entries);
   renderClearedStrip();
   if (!entries.length) {
     // Distinguish "still scanning" from "tape is quiet" — a board that
     // says why it's empty is trustworthy; one showing week-old cards isn't.
-    if (boardLastFetch) grid.innerHTML = '<div class="cc-empty">Quiet tape right now — no name has a fresh stacked signal or near-term deal catalyst (signals older than 3 weeks age off this board; see History and the M&amp;A Deals tab for the long tail).</div>';
+    if (boardLastFetch) grid.innerHTML = `<div class="cc-empty">${universeOffline ? 'Universe gate offline — the Worker\'s /universe route isn\'t deployed yet (run npx wrangler deploy); showing nothing rather than unverified names. ' : ''}Quiet tape right now — no name that passes the universe gate has a fresh stacked signal or near-term deal catalyst (signals older than 3 weeks age off this board; the Filtered tab shows what was held out and why).</div>`;
     return;
   }
   const isNew = ccFirstSeen(entries);
@@ -2519,13 +2712,17 @@ async function loadSchedule13() {
               byAcc.set(h.acc, {
                 acc: h.acc, form: (h.form || '').toUpperCase(), filed: h.filed,
                 link: h.link, subject: h.subject || '', filers: h.filers || [],
-                ticker: (h.tickers && h.tickers[0]) || null, fromHistory: true,
+                ticker: (h.tickers && h.tickers[0]) || null, fromHistory: true, tickerLookedUp: !!h.gate,
                 workerKind: h.kind || null, workerFlags: h.flags || null, workerPct: h.pct != null ? h.pct : null
               });
             } else {
               if (h.tickers && h.tickers.length && !existing.ticker) existing.ticker = h.tickers[0]; // efts records know the subject's ticker; the atom feed doesn't
+              if (h.gate) existing.tickerLookedUp = true;
               if (h.kind && !existing.workerKind) { existing.workerKind = h.kind; existing.workerFlags = h.flags || null; existing.workerPct = h.pct != null ? h.pct : null; }
             }
+            // The Worker already ran the universe gate for this subject —
+            // seed the local verdict cache so the row never has to wait.
+            if (h.gate) universeSeed(h.gate, h.subject);
           }
           historyMeta = hist.backfill || null;
         }
@@ -2579,7 +2776,7 @@ function renderSched13() {
   const body = document.getElementById('watch13d-body');
   if (!sched13Filings.length) return;
   const rows = sched13Filter === 'OPP'
-    ? [...sched13Filings].filter(r => r.tier >= 2).sort((a, b) => new Date(b.filed) - new Date(a.filed))
+    ? [...sched13Filings].filter(r => r.tier >= 2 && sched13Eligible(r)).sort((a, b) => new Date(b.filed) - new Date(a.filed))
     : sched13Filings.filter(r =>
         sched13Filter === 'ALL' ? true
         : sched13Filter === 'NEW' ? r.form === 'SCHEDULE 13D'
@@ -2588,7 +2785,7 @@ function renderSched13() {
     <div class="status-box" style="margin-bottom:16px;text-align:left;padding:16px 20px">
       Live <strong>Schedule 13D / 13G</strong> filings — the disclosure required within days of any investor crossing 5% ownership of a public company.
       A <strong>NEW 13D</strong> is the classic activist opening move; <strong>13D AMEND</strong> means an existing holder changed their position or intentions; 13G is the same threshold with passive intent.
-      Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong> — most other raw 13D filings are founders and family holders, not campaigns. "★ Opportunities" shows only those. Stake % and the <strong>Read</strong> column are parsed from each filing's text as it loads: a 13D whose shares came from a securities purchase agreement, convertible or warrant package (usually with a 9.99% ownership blocker) is flagged <strong style="color:var(--rose)">FINANCING / DILUTION</strong> — that is the company selling paper to the filer, not the filer buying stock, and it is excluded from ★ Opportunities and the Confluence Board. A 13D whose shares were <strong>DEAL CONSIDERATION</strong> (payment for a business the filer sold to the issuer, often in tranches) is treated the same way. Item 4 intent is only counted in sentences that aren't denying it — the (a)–(j) boilerplate on a passive filing no longer reads as activist. Stated activist intent and open-market buying rank up; director/founder filers rank down. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
+      Rows highlighted in green are the likeliest opportunities: a new 13D, or any 13D activity from a <strong>★ known activist</strong>, on a company that passes the <strong>universe gate</strong> (NYSE/Nasdaq, $2+, $250M+ market cap, $1M+/day traded) — most other raw 13D filings are founders, family holders and shells, not campaigns. "★ Opportunities" shows only those; a ⛔ pill in the Read column says why a row was held out. Stake % and the <strong>Read</strong> column are parsed from each filing's text as it loads: a 13D whose shares came from a securities purchase agreement, convertible or warrant package (usually with a 9.99% ownership blocker) is flagged <strong style="color:var(--rose)">FINANCING / DILUTION</strong> — that is the company selling paper to the filer, not the filer buying stock, and it is excluded from ★ Opportunities and the Confluence Board. A 13D whose shares were <strong>DEAL CONSIDERATION</strong> (payment for a business the filer sold to the issuer, often in tranches) is treated the same way. Item 4 intent is only counted in sentences that aren't denying it — the (a)–(j) boilerplate on a passive filing no longer reads as activist. Stated activist intent and open-market buying rank up; director/founder filers rank down. Not investment advice — a 13D marks the <em>start</em> of a campaign, not a guaranteed outcome.
       <div class="empty-note" style="margin-top:8px">${sched13HistoryMeta
         ? (sched13HistoryMeta.done
           ? 'Depth: the live feed plus the Worker\'s stored scan history and a 12-month backfill of roster-activist 13Ds from EDGAR full-text search — ★ Opportunities goes back months, not hours.'
@@ -2600,7 +2797,7 @@ function renderSched13() {
       <thead><tr><th>Filed</th><th>Type</th><th>Target Company</th><th>Filed By</th><th>Stake</th><th title="What the filing text says about HOW the shares were acquired and WHAT the filer intends — the metric that separates a real accumulation from a dilutive financing or a founder's routine filing">Read</th><th></th></tr></thead>
       <tbody>
         ${rows.map(r => `
-          <tr${r.tier >= 2 ? ' style="background:rgba(57,255,143,0.05)"' : r.kind === 'financing' ? ' style="background:rgba(255,80,110,0.05)"' : ''}>
+          <tr${r.tier >= 2 && sched13Eligible(r) ? ' style="background:rgba(57,255,143,0.05)"' : (SCHED13_DEAD_KINDS.has(r.kind) || (sched13Gate(r).known && !sched13Gate(r).pass)) ? ' style="background:rgba(255,80,110,0.05)"' : ''}>
             <td class="mono" style="color:var(--text-muted);white-space:nowrap">${r.filed ? new Date(r.filed).toLocaleString() : '—'}</td>
             <td style="white-space:nowrap">${sched13Badge(r.form)}${r.escalation ? ' <span class="badge-pill badge-esc" title="This filer previously held this company passively (13G) and has now filed an ACTIVE 13D — the classic passive-turns-hostile escalation">13G→13D</span>' : ''}${r.activist ? ` <span class="badge-pill" style="background:var(--teal-dim);color:var(--teal)" title="Filer matches the known-activist roster">★ ${escHtml(r.activist.toUpperCase())}</span>` : ''}</td>
             <td style="font-weight:600">${escHtml(r.subject || '—')}${r.ticker ? ' · ' + tickerLink(r.ticker, r.subject) : ''}</td>
@@ -2634,15 +2831,18 @@ function renderSched13() {
 //   accumulation — Item 5(c) open-market purchases, no red flags.
 //   affiliate    — filer is a director/officer/founder/family holder.
 //   plain        — nothing distinctive in the text.
-const SCHED13_CLASS_KEY = 'sd_sched13_class_v3';
+const SCHED13_CLASS_KEY = 'sd_sched13_class_v4'; // v4: issuance kind, same-address insider, token-buying test
 const sched13Class = sdMemGet(SCHED13_CLASS_KEY, {});
 //   consideration — shares were payment for an asset/company the filer sold
 //                  to the issuer (stock purchase / asset purchase / merger
 //                  consideration, earn-out tranches). The filer never bought
 //                  anything; the issuer paid in paper. Context, not a signal.
-const SCHED13_KIND_MULT = { financing: 0, consideration: 0.2, deal: 0.8, activist: 1.5, accumulation: 1.25, affiliate: 0.5, plain: 1, unknown: 1 };
+// Dead kinds are 0 — not discounted, ZERO. A founder's amendment, a
+// dividend paid in stock, a PIPE: none of them can earn a card by
+// stacking multipliers any more.
+const SCHED13_KIND_MULT = { financing: 0, issuance: 0, consideration: 0, deal: 0.8, activist: 1.5, accumulation: 1.25, affiliate: 0, plain: 1, unknown: 1 };
 const SCHED13_KIND_LABEL = {
-  financing: '⚠ FINANCING / DILUTION', consideration: '🧾 DEAL CONSIDERATION', deal: '🤝 DEAL-LINKED', activist: '★ ACTIVIST INTENT',
+  financing: '⚠ FINANCING / DILUTION', issuance: '🖨 ISSUED, NOT BOUGHT', consideration: '🧾 DEAL CONSIDERATION', deal: '🤝 DEAL-LINKED', activist: '★ ACTIVIST INTENT',
   accumulation: '📈 OPEN-MARKET BUYING', affiliate: 'AFFILIATE / INSIDER', plain: 'PLAIN 13D', unknown: '…'
 };
 
@@ -2651,9 +2851,83 @@ const SCHED13_KIND_LABEL = {
 // relates to ... nominate ... board ... special meeting". Counting those
 // words raw makes every passive filing look like stated intent (Nexalin,
 // Sep 2026). Drop negated sentences before counting intent.
+// ── classify13D:begin ─────────────────────────────────────────
+// SHARED between index.html and alpaca-proxy-worker.js — the unit test
+// asserts the two copies are byte-identical. Edit both or neither.
+//
+// "A 13D was filed" is not a signal. What matters is HOW the filer came
+// to own the shares and WHAT they say they'll do. Kinds, in the priority
+// order they're assigned:
+//   financing     — SPA / convertible / warrant / PIPE, 9.99% blocker: the
+//                   company sold paper to the filer. Dilution, never a buy.
+//   issuance      — shares the issuer printed to settle an obligation:
+//                   accrued preferred dividends paid in stock, PIK, debt
+//                   or fees settled in shares (Rainmaker Worldwide, Sep
+//                   2026: 9.2M shares "in satisfaction of accrued
+//                   dividends" on the insider's own preferred). Nobody
+//                   bought anything.
+//   consideration — shares were payment for a business/asset the filer
+//                   sold to the issuer (earn-outs, tranches).
+//   deal          — voting/support/merger agreement: an acquirer's 13D.
+//   activist      — stated intent (nominations, proxy, strategic review,
+//                   sale of the company) in sentences that aren't denials.
+//   accumulation  — real open-market buying, by a non-insider, in a size
+//                   that isn't token ($250K+ where the text lets us add
+//                   it up). "20,000 shares at $0.01" is not accumulation.
+//   affiliate     — director/officer/founder, or a filer whose business
+//                   address on the SEC header IS the issuer's address.
+//   plain         — nothing distinctive.
 const NEGATED_SENTENCE = /\b(?:no (?:present |current )?(?:plans?|proposals?|intention|right)|does not (?:have|intend|currently)|do not (?:have|intend)|has no (?:right|plan|intention)|have no (?:right|plan|intention)|not (?:currently )?(?:have|intend|entitled)|except as (?:set forth|described))\b/i;
 function stripNegated(t) {
   return t.split(/(?<=[.;:])\s+|\n+/).filter(sen => !NEGATED_SENTENCE.test(sen)).join(' ');
+}
+const OPEN_MARKET_TOKEN_USD = 250000; // below this, "open market purchases" is a footnote, not a signal
+
+// Two ways a filer turns out to live at the issuer's address:
+//   1. the SEC header of the full submission carries a BUSINESS ADDRESS
+//      block for the SUBJECT COMPANY and for each FILED BY entity — same
+//      street + zip on both sides;
+//   2. the body: Item 1 states the issuer's principal executive office,
+//      and the same street shows up again under Item 2 as a reporting
+//      person's address (Rainmaker: "2510 East Sunset Road" for the
+//      issuer AND for both of the insider's holding companies).
+function sched13SameAddress(text) {
+  const t = String(text || '');
+  const head = t.slice(0, 20000);
+  const blocks = head.split(/\n(?=\s*(?:SUBJECT COMPANY|FILED BY):)/);
+  const addr = b => {
+    const m = b.match(/(?:BUSINESS|MAIL) ADDRESS:[\s\S]{0,400}?STREET 1:\s*([^\n]+)[\s\S]{0,300}?ZIP:\s*([0-9A-Za-z -]+)/);
+    return m ? (m[1] + ' ' + m[2]).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+  };
+  let subject = null; const filers = [];
+  for (const b of blocks) {
+    if (/^\s*SUBJECT COMPANY:/.test(b)) subject = addr(b);
+    else if (/^\s*FILED BY:/.test(b)) { const a = addr(b); if (a) filers.push(a); }
+  }
+  if (subject && filers.some(f => f === subject)) return true;
+  const body = t.replace(/<SEC-HEADER>[\s\S]*?<\/SEC-HEADER>/, '');
+  const office = body.match(/principal (?:executive )?offices?[^.]{0,80}?\b(\d{2,6}\s+(?:[A-Z][A-Za-z.]*\s+){1,4}(?:Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Way|Lane|Ln|Parkway|Pkwy|Plaza|Place|Court|Highway|Hwy)\b)/);
+  if (!office) return false;
+  const street = office[1].toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const hits = body.toUpperCase().replace(/[^A-Z0-9]/g, '').split(street).length - 1;
+  return hits >= 2; // once in Item 1 (the issuer), again under Item 2 (the filer)
+}
+
+// Add up the dollars behind purchase sentences ("1,250,000 shares ... at
+// $14.20"). Conversion/exercise/warrant sentences are skipped so a
+// financing's terms never read as a buy. Null when nothing is countable.
+function sched13PurchaseDollars(text) {
+  const sentences = String(text || '').split(/(?<=[.;])\s+|\n+/);
+  let total = 0, n = 0;
+  for (const sen of sentences) {
+    if (!/purchas|acquired|bought|open[- ]market/i.test(sen)) continue;
+    if (/conver|exercis|warrant|dividend|in satisfaction|consideration for/i.test(sen)) continue;
+    for (const m of sen.matchAll(/([\d,]{2,})\s+(?:shares|Shares|common shares)[^$]{0,160}?\$\s?([\d,]*\.?\d+)/g)) {
+      const sh = parseFloat(m[1].replace(/,/g, '')), px = parseFloat(m[2].replace(/,/g, ''));
+      if (sh > 0 && px > 0 && px < 100000) { total += sh * px; n++; }
+    }
+  }
+  return n ? total : null;
 }
 
 function classify13D(text) {
@@ -2671,6 +2945,15 @@ function classify13D(text) {
   if (/convertible|debenture/i.test(t)) flags.push('convertible security');
   if (/\bwarrants?\b/i.test(t) && financingHits >= 2) flags.push('warrants');
   if (/additional investment right/i.test(t)) flags.push('further-investment right');
+  // Issuance: the issuer printed shares to settle something it owed.
+  const issuanceHits =
+    count(/in (?:full |partial )?satisfaction of (?:the )?(?:accrued|accumulated|unpaid|outstanding)? ?(?:dividends?|interest|indebtedness|debt|amounts? (?:owed|due)|obligations?|fees)/gi) +
+    count(/(?:accrued|accumulated|unpaid) (?:and unpaid )?dividends? (?:payable|paid|settled|satisfied)/gi) +
+    count(/dividends? (?:paid|payable|settled) in (?:shares|common stock|kind)/gi) +
+    count(/in lieu of (?:a )?cash/gi) + count(/paid[- ]in[- ]kind|\bPIK\b/g) +
+    count(/(?:for|in exchange for) services (?:rendered|provided|performed)/gi) +
+    count(/(?:settlement|conversion|cancellation) of (?:accrued |outstanding )?(?:interest|indebtedness|debt|notes? payable|amounts? owed)/gi);
+  if (issuanceHits) flags.push('shares issued to settle an obligation (dividend / PIK / debt / fees)');
   const dealHits = count(/voting agreement/gi) + count(/support agreement/gi) + count(/agreement and plan of merger/gi) + count(/merger agreement/gi) + count(/tender offer/gi);
   // Consideration shares: the filer SOLD something and got paid in stock.
   const considerationHits =
@@ -2690,30 +2973,42 @@ function classify13D(text) {
     pcount(/intends? to (?:engage|seek|pursue|nominate|solicit)/gi);
   const openMarketHits = count(/open[- ]market/gi);
   // Affiliate: a director/officer of the issuer is the filer OR owns a
-  // piece of the filer ("Dr. X, a member of the Issuer's board ... holds a
-  // minority ownership interest in GLV").
-  const affiliate = /(?:director|officer|chairman|chief executive officer|founder|president) of the (?:issuer|company)/i.test(t) ||
+  // piece of the filer OR the filer's SEC-header address is the issuer's.
+  const sameAddress = sched13SameAddress(t);
+  if (sameAddress) flags.push("filer's business address is the issuer's address");
+  const affiliate = sameAddress ||
+    /(?:director|officer|chairman|chief executive officer|founder|president) of the (?:issuer|company)/i.test(t) ||
     /serves? as (?:a |the )?(?:director|chairman|chief [a-z]+ officer|chief executive)/i.test(t) || /employment agreement/i.test(t) ||
     /member of the (?:issuer|company)'s board/i.test(t) || /(?:issuer|company)'s (?:chief [a-z]+ officer|board of directors)/i.test(t) ||
     /(?:ownership|membership|equity) interest in (?:the reporting person|the filer|[A-Z]{2,5}\b)/i.test(t);
-  if (affiliate) flags.push('filer is, or is part-owned by, a director/officer of the issuer');
+  if (affiliate && !sameAddress) flags.push('filer is, or is part-owned by, a director/officer of the issuer');
   // Distress tells in the filing text itself.
   const reverseSplit = /reverse (?:stock )?split/i.test(t);
   if (reverseSplit) flags.push('recent reverse split — cover-page share count may be pre-split');
   if (/delist(?:ing|ed)?/i.test(t)) flags.push('delisting language');
+  const subDollar = /\$\s?0?\.\d{2,}\s*(?:per share|a share|\/share)/i.test(t);
+  if (subDollar) flags.push('sub-dollar share price quoted in the filing');
+  // Open-market buying only counts when it's real money.
+  const purchaseUsd = sched13PurchaseDollars(t);
+  const tokenBuying = openMarketHits > 0 && purchaseUsd != null && purchaseUsd < OPEN_MARKET_TOKEN_USD;
   if (dealHits) flags.push('voting/merger agreement');
   if (intentHits >= 2) flags.push('stated activist intent');
-  if (openMarketHits) flags.push('open-market purchases');
+  if (openMarketHits && !tokenBuying) flags.push('open-market purchases');
+  if (tokenBuying) flags.push(`open-market buying is token (~$${Math.round(purchaseUsd).toLocaleString('en-US')})`);
   const strongFinancing = /securities purchase agreement|subscription agreement|private placement/i.test(t) && /convertible|debenture|warrant|preferred/i.test(t);
   let kind = 'plain';
   if (strongFinancing || financingHits >= 4 || (blocker && financingHits >= 1)) kind = 'financing';
+  else if (issuanceHits >= 1 && intentHits < 2) kind = 'issuance';
   else if (soldToIssuer || considerationHits >= 3) kind = 'consideration';
   else if (dealHits >= 2) kind = 'deal';
   else if (intentHits >= 2) kind = 'activist';
-  else if (openMarketHits >= 1 && !affiliate) kind = 'accumulation';
+  else if (openMarketHits >= 1 && !affiliate && !tokenBuying) kind = 'accumulation';
   else if (affiliate || blocker) kind = 'affiliate';
-  return { kind, flags, blocker, affiliate, reverseSplit, openMarket: openMarketHits > 0, intent: intentHits >= 2 };
+  return { kind, flags, blocker, affiliate, sameAddress, reverseSplit, subDollar, purchaseUsd, openMarket: openMarketHits > 0 && !tokenBuying, intent: intentHits >= 2 };
 }
+// A kind that can never be a buy signal, whatever the name on the filing.
+const SCHED13_DEAD_KINDS = new Set(['financing', 'issuance', 'consideration', 'affiliate']);
+// ── classify13D:end ───────────────────────────────────────────
 
 // Parse the cover page: percent of class + aggregate shares owned. Together
 // they imply the share count, which × last close gives a market cap even
@@ -2751,7 +3046,7 @@ function applySched13Analysis(r, a) {
   if (a.mcap > 0) r.mcap = a.mcap;
   // A financing 13D is context, not an opportunity — drop it out of the
   // ★ view and the alert tier regardless of how it was tiered on name alone.
-  if ((r.kind === 'financing' || r.kind === 'consideration') && r.tier >= 2) { r.tierBefore = r.tier; r.tier = 1; }
+  if (SCHED13_DEAD_KINDS.has(r.kind) && r.tier >= 2) { r.tierBefore = r.tier; r.tier = 1; }
 }
 
 // Fetch + analyze one filing (cached per accession in localStorage so a
@@ -2774,7 +3069,9 @@ async function analyzeSched13(r) {
     // inflated ~ratio× and the MICROCAP tell disappears. Don't compute it.
     a = { pct: cover.pct, amt: cover.amt, sharesOut: cls.reverseSplit ? null : cover.sharesOut, kind: cls.kind, flags: cls.flags, blocker: cls.blocker, affiliate: cls.affiliate, reverseSplit: cls.reverseSplit, at: Date.now() };
   } catch (e) {
-    a = { pct: null, kind: 'unknown', flags: [], at: Date.now(), failed: true };
+    // Keep whatever the Worker's history already told us (kind/flags/pct)
+    // rather than downgrading a known reading to 'unknown' on a bad fetch.
+    a = { pct: r.pct != null ? r.pct : null, kind: r.kind || 'unknown', flags: r.flags || [], affiliate: r.affiliate, at: Date.now(), failed: true };
   }
   if (!a.failed) {
     sched13Class[r.acc] = a;
@@ -2804,7 +3101,7 @@ function sched13Quality(r) {
   let mult = SCHED13_KIND_MULT[kind] != null ? SCHED13_KIND_MULT[kind] : 1;
   const flags = r.flags || [];
   if (kind === 'activist' && flags.includes('open-market purchases')) mult = 1.75;
-  if (r.mcap > 0 && r.mcap < 50e6 && mult > 0) mult *= 0.7; // sub-$50M names: thin float, hard to trade
+  // (the sub-$50M discount is gone — the universe gate holds those out entirely)
   // Distress + insider linkage are discounts, not disqualifiers: the row
   // keeps its details in 13D Watch; it just stops competing for a card.
   if (flags.some(f => f.startsWith('recent reverse split')) && mult > 0) mult *= 0.5;
@@ -2813,6 +3110,7 @@ function sched13Quality(r) {
   if (r.affiliate && kind !== 'affiliate') extras.push('insider-linked filer');
   if (flags.some(f => f.startsWith('recent reverse split'))) extras.push('reverse split');
   const base = kind === 'financing' ? 'financing, not accumulation'
+    : kind === 'issuance' ? 'shares issued to settle an obligation, not bought'
     : kind === 'consideration' ? 'shares were payment for a sale to the issuer, not a purchase'
     : kind === 'activist' ? 'stated activist intent in Item 4'
     : kind === 'accumulation' ? 'open-market purchases in Item 5(c)'
@@ -2824,10 +3122,14 @@ function sched13Quality(r) {
 
 function sched13KindHtml(r) {
   const kind = r.kind || 'unknown';
-  const color = kind === 'financing' ? 'var(--rose)' : (kind === 'activist' || kind === 'accumulation') ? 'var(--teal)' : kind === 'unknown' ? 'var(--text-muted)' : 'var(--text-dim)';
+  const color = (kind === 'financing' || kind === 'issuance') ? 'var(--rose)' : (kind === 'activist' || kind === 'accumulation') ? 'var(--teal)' : kind === 'unknown' ? 'var(--text-muted)' : 'var(--text-dim)';
   const title = (r.flags && r.flags.length ? r.flags.join(' · ') : 'Read from the filing text as it loads') + (r.mcap > 0 ? ` · ~${fmtCap(r.mcap)} market cap` : '');
   const micro = r.mcap > 0 && r.mcap < 50e6 ? ' <span class="badge-pill" style="background:var(--amber-dim);color:var(--amber)" title="Market cap implied by the filing\'s share count × last close">MICROCAP</span>' : '';
-  return `<span class="badge-pill" style="color:${color};border:1px solid var(--border);background:transparent" title="${escHtml(title)}">${SCHED13_KIND_LABEL[kind] || kind}</span>${micro}`;
+  const g = sched13Gate(r);
+  const gateHtml = g.known && !g.pass
+    ? ` <span class="badge-pill" style="background:var(--rose-dim,rgba(255,80,110,0.12));color:var(--rose)" title="${escHtml(g.reasons.join(' · '))}">⛔ ${escHtml(g.reasons[0] || 'filtered')}</span>`
+    : g.known && g.v && g.v.mcap > 0 ? ` <span class="badge-pill" style="color:var(--text-muted);border:1px solid var(--border);background:transparent" title="${escHtml(universeLabel(g.v))}">${escHtml(g.v.exchange || '')} · ${fmtCap(g.v.mcap)}</span>` : '';
+  return `<span class="badge-pill" style="color:${color};border:1px solid var(--border);background:transparent" title="${escHtml(title)}">${SCHED13_KIND_LABEL[kind] || kind}</span>${micro}${gateHtml}`;
 }
 
 // Displayed rows: analyze (cached or fetched) and fill the Stake + Read cells.
@@ -3232,6 +3534,10 @@ function renderSignals() {
   )
     .map(s => ({ ...s, ageDays: signalAgeDays(s) }))
     .filter(s => s.ageDays <= (s.source === 'institution' ? SIGNAL_13F_MAX_AGE_DAYS : SIGNAL_MAX_AGE_DAYS))
+    // UNIVERSE GATE: a Top Signal on a name that isn't NYSE/Nasdaq, $2+,
+    // $250M+ and liquid is not a top signal. (Board rejects are logged in
+    // computeConfluence, which runs right after this.)
+    .filter(s => !isRealTicker(s.ticker) || gateFor(s.ticker).pass)
     // sortValue carries the quality weights (insider role, cluster premium,
     // first-buy bonus, stake-change size); valueUsd stays the honest
     // displayed dollar figure. materialityMult() rescales by the trade's
@@ -3254,7 +3560,7 @@ function renderSignals() {
   }
   body.innerHTML = `
     <div class="status-box" style="text-align:left;padding:14px 18px;font-size:11px">
-      Conviction events, ranked by <strong>materiality</strong> — each trade's size <em>relative to the company's market cap</em> (2 bp of the equity is neutral; 0.3% of a company scores 4× a rounding-error trade at a megacap) and, for insiders, relative to their own prior holdings (doubling a stake earns a bonus) — then <em>weighted by freshness</em>: recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Raw dollars are shown but no longer rank: a $5M buy at a $3T company is not a signal, a $300K CEO buy in a $60M company is. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. A 13F is a quarter-end snapshot that was already up to 45 days old when filed, so each row states the <strong>as-of date</strong>, ranks by % of the fund's book rather than raw dollars, fades on a ${SIGNAL_13F_HALF_LIFE_DAYS}-day half-life and leaves this board after ${SIGNAL_13F_MAX_AGE_DAYS} days. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names. Buy-side rows also get a <strong>CONTRACT 8-Ks</strong> badge when EDGAR full-text search finds recent filings matching contract/award language — a keyword lead worth reading, not a verified win — with a small extra rank boost, because committed capital plus a growing order book is the strongest overlap the public record offers.
+      <strong>Universe gate:</strong> only NYSE/Nasdaq names at $2+, $250M+ market cap and $1M+/day traded can appear here or on the board; everything else is on the Filtered tab with its reason. Conviction events, ranked by <strong>materiality</strong> — each trade's size <em>relative to the company's market cap</em> (2 bp of the equity is neutral; 0.3% of a company scores 4× a rounding-error trade at a megacap) and, for insiders, relative to their own prior holdings (doubling a stake earns a bonus) — then <em>weighted by freshness</em>: recent rises, old fades, and anything past ${SIGNAL_MAX_AGE_DAYS} days drops off. Raw dollars are shown but no longer rank: a $5M buy at a $3T company is not a signal, a $300K CEO buy in a $60M company is. The board <strong>remembers</strong>: signals persist in this browser across visits, so it builds a record over weeks instead of resetting to whatever the feeds happen to show today. 13F entries are held to a conviction bar — only NEW stakes and full EXITs that are ≥ $25M <em>and</em> ≥ 0.75% of that fund's own book (quant funds excluded entirely); routine adds/trims stay on the Hedge Funds cards where they belong. A 13F is a quarter-end snapshot that was already up to 45 days old when filed, so each row states the <strong>as-of date</strong>, ranks by % of the fund's book rather than raw dollars, fades on a ${SIGNAL_13F_HALF_LIFE_DAYS}-day half-life and leaves this board after ${SIGNAL_13F_MAX_AGE_DAYS} days. Insider entries are open-market buys and sells only (grants, RSU vesting and other compensation excluded). Duplicate joint filings are shown once — expand "filed ×N" to see each one. Buy-side rows carry a live <strong>EV/EBITDA</strong> chip computed from SEC XBRL — cheap multiples (&lt;12×) get a modest rank boost and rich ones (&gt;25×) a trim, since insider buying has historically been most informative in cheap names. Buy-side rows also get a <strong>CONTRACT 8-Ks</strong> badge when EDGAR full-text search finds recent filings matching contract/award language — a keyword lead worth reading, not a verified win — with a small extra rank boost, because committed capital plus a growing order book is the strongest overlap the public record offers.
     </div>
     ${ranked.map((s, i) => `
     <div class="signal-row" style="grid-template-columns:auto 1fr auto auto auto">

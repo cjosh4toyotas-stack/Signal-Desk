@@ -14,12 +14,13 @@ const worker = readFileSync(new URL('./alpaca-proxy-worker.js', import.meta.url)
 const slice = (src, from, to) => src.slice(src.indexOf(from), src.indexOf(to));
 
 // ── (3) classifier parity ──
-const fnHtml = slice(html, 'function classify13D', '// Parse the cover page');
-const fnWorker = slice(worker, 'function classify13D', 'function parse13DPercent');
+const fnHtml = slice(html, '// ── classify13D:begin', '// ── classify13D:end');
+const fnWorker = slice(worker, '// ── classify13D:begin', '// ── classify13D:end');
 t('classify13D is identical in index.html and the worker', fnHtml.trim() === fnWorker.trim());
 
 // ── (1) classification ──
 const classify13D = new Function(fnWorker + '; return classify13D;')();
+const F = await import('./test/fixtures.mjs');
 const expion = `Item 3. On August 21, 2026, FNL entered into a Securities Purchase Agreement with the Issuer pursuant to which it purchased an 8% Convertible Debenture due August 21, 2029 in the principal amount of $4,500,000, convertible into Series A-1 8% Convertible Preferred Stock at a conversion price of $4.25, a Common Stock Purchase Warrant to purchase 1,058,609 shares at an exercise price of $4.25, and an Additional Investment Right to purchase up to $91,000,000 of additional preferred stock, subject to a contractually stipulated 9.99% ownership restriction. Registration Rights Agreement. Joseph Hammer served as a director of the Issuer until the date of this filing. Item 4. Acquired for investment purposes; no present plan or proposal.`;
 const elliott = `Item 3. The Reporting Persons purchased 12,500,000 Shares in open market transactions using working capital. Item 4. The Shares are undervalued. The Reporting Persons have discussed board composition and a review of strategic alternatives including a sale of the Issuer, intend to nominate directors and may conduct a proxy solicitation to maximize shareholder value. Item 5(c). Open market purchases on Schedule A.`;
 const founder = `Item 2. Mr. Smith is the founder and serves as Chairman and Chief Executive Officer of the Issuer. Item 3. Shares acquired at the IPO and under his employment agreement. Item 4. Held for investment.`;
@@ -37,9 +38,10 @@ t('quiet open-market accumulator → accumulation', classify13D(quiet).kind === 
 const multSrc = slice(html, 'const SCHED13_KIND_MULT', 'const SCHED13_KIND_LABEL');
 const SCHED13_KIND_MULT = new Function(multSrc + '; return SCHED13_KIND_MULT;')();
 t('financing earns zero confluence points', SCHED13_KIND_MULT.financing === 0);
-t('activist intent > open-market > plain > affiliate', SCHED13_KIND_MULT.activist > SCHED13_KIND_MULT.accumulation && SCHED13_KIND_MULT.accumulation > SCHED13_KIND_MULT.plain && SCHED13_KIND_MULT.plain > SCHED13_KIND_MULT.affiliate);
+t('activist intent > open-market > plain', SCHED13_KIND_MULT.activist > SCHED13_KIND_MULT.accumulation && SCHED13_KIND_MULT.accumulation > SCHED13_KIND_MULT.plain);
+t('issuance, consideration and affiliate are ZERO, not discounts', SCHED13_KIND_MULT.issuance === 0 && SCHED13_KIND_MULT.consideration === 0 && SCHED13_KIND_MULT.affiliate === 0);
 t('confluence stream 3 skips zero-multiplier filings', /const q = sched13Quality\(r\);\s*if \(q\.mult <= 0\) continue;/.test(html));
-t('financing 13Ds are demoted out of ★ Opportunities (tier→1)', /r\.kind === 'financing' && r\.tier >= 2\) \{ r\.tierBefore = r\.tier; r\.tier = 1; \}/.test(html));
+t('dead-kind 13Ds are demoted out of ★ Opportunities (tier→1)', /SCHED13_DEAD_KINDS\.has\(r\.kind\) && r\.tier >= 2\) \{ r\.tierBefore = r\.tier; r\.tier = 1; \}/.test(html));
 t('worker never pushes a financing 13D', /if \(reading\.kind === 'financing'\) \{ status\.suppressedFinancing\+\+; continue; \}/.test(worker));
 
 // ── (2) materiality ──
@@ -82,6 +84,41 @@ t('note carries 1m/3m/since-signal figures', /1m \+30%, 3m \+60%, since newest s
 t('confluence score applies the trend multiplier', /e\.pts \* \(1 \+ 0\.45 \* \(e\.sources\.size - 1\)\) \* tm\.mult/.test(html));
 t('deal-stream cards are exempt from the trend multiplier', /!e\.sources\.has\('deal'\) \? ccTrend\[e\.ticker\] : null/.test(html));
 t('price context caches to localStorage with a TTL', /sd_pricectx_v1/.test(html) && /PRICECTX_TTL = 6 \* 3600 \* 1000/.test(html));
+
+
+// ── (4) The universe gate + the Rainmaker case (2026-09-16) ──
+// A 13D on an OTC shell where the insider's own preferred dividends were
+// paid in stock, plus "20,000 shares at $0.01" of open-market buying, was
+// surfacing as OPEN-MARKET BUYING. Now: the READING says issuance/insider/
+// token, and the GATE says not a public company you can trade.
+const rakr = classify13D(F.rakr);
+t('Rainmaker → issuance (dividends paid in stock, nobody bought)', rakr.kind === 'issuance');
+t('Rainmaker: filer shares the issuer\'s address (Item 1 vs Item 2)', rakr.sameAddress === true && rakr.affiliate === true);
+t('Rainmaker: $0.01/share open-market buying is token, not accumulation', rakr.purchaseUsd === 200 && rakr.openMarket === false);
+t('Rainmaker: sub-dollar price flagged', rakr.subDollar === true);
+t('PIK dividend in shares → issuance', classify13D(F.pik).kind === 'issuance');
+t('15,000 shares at $0.42 → not accumulation (token)', classify13D(F.tokenBuyer).kind !== 'accumulation');
+t('$61.5M open-market buyer with Item 4 denial boilerplate → accumulation, not activist', classify13D(F.passiveBoiler).kind === 'accumulation');
+t('$412M Elliott-style buyer still reads activist with real open-market dollars', classify13D(F.elliott).kind === 'activist' && classify13D(F.elliott).purchaseUsd > 1e6);
+t('Expion still reads financing', classify13D(F.expion).kind === 'financing');
+const deadSrc = slice(worker, 'const SCHED13_DEAD_KINDS', '// ── classify13D:end');
+const SCHED13_DEAD_KINDS = new Function(deadSrc + '; return SCHED13_DEAD_KINDS;')();
+t('dead kinds = financing, issuance, consideration, affiliate', ['financing', 'issuance', 'consideration', 'affiliate'].every(k => SCHED13_DEAD_KINDS.has(k)) && !SCHED13_DEAD_KINDS.has('accumulation'));
+// Every board stream and Top Signals consult gateFor(); unknown is not a pass.
+t('confluence: insider/13F stream is gated', /const g = gateFor\(s\.ticker\);\s*if \(!g\.pass\)/.test(html));
+t('confluence: 13D stream requires a real ticker, then the gate', /if \(!isRealTicker\(r\.ticker\)\) \{[^\n]*continue; \}\s*const g13 = gateFor\(r\.ticker\);\s*if \(!g13\.pass\)/.test(html));
+t('confluence: 13D dead kinds are rejected before scoring', /if \(SCHED13_DEAD_KINDS\.has\(r\.kind\)\) \{ reject\(/.test(html));
+t('confluence: proxy-fight stream is gated', /const gc = gateFor\(ct\);\s*if \(!gc\.pass\)/.test(html));
+t('confluence: deal stream is gated', /const gd = gateFor\(d\.ticker\);\s*if \(!gd\.pass\)/.test(html));
+t('Top Signals rows are gated', /\.filter\(s => !isRealTicker\(s\.ticker\) \|\| gateFor\(s\.ticker\)\.pass\)/.test(html));
+t('★ Opportunities requires sched13Eligible', /r\.tier >= 2 && sched13Eligible\(r\)/.test(html));
+t('gateFor: unknown verdict is NOT a pass', /return \{ known: false, pass: false/.test(html));
+t('microcap ×0.7 discount removed (the gate owns it now)', !/r\.mcap < 50e6 && mult > 0\) mult \*= 0\.7/.test(html));
+t('Filtered tab exists and renders rejects', /id="tab-filtered"/.test(html) && /function renderFiltered\(\)/.test(html) && /if \(name === 'filtered'\) renderFiltered\(\);/.test(html));
+t('worker: /universe route exposed', /url\.pathname === '\/universe'/.test(worker));
+t('worker: alert scan gates before kind', /if \(!gate \|\| !gate\.pass\) \{ status\.suppressedGate\+\+; continue; \}[\s\S]{0,400}SCHED13_DEAD_KINDS\.has\(reading\.kind\)/.test(worker));
+t('worker: history rows carry the gate verdict', /gate: gates\[r\.acc\],/.test(worker));
+t('classification cache key bumped (old verdicts recomputed)', /sd_sched13_class_v4/.test(html));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
